@@ -1,0 +1,13 @@
+appenders:
+    stdout:
+        kind: console
+        encoder:
+            pattern: "{d(%+)(utc)} {h({l})} {m}{n}"
+        filters:
+            - kind: threshold
+              level: info
+
+root:
+    level: info
+    appenders:
+        - stdout
