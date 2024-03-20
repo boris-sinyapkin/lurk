@@ -4,7 +4,9 @@ use log4rs::config::Deserializers;
 use server::LurkServer;
 
 mod config;
+mod connection;
 mod server;
+mod proto;
 
 #[tokio::main]
 async fn main() -> Result<()> {

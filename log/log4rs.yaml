@@ -2,12 +2,9 @@ appenders:
     stdout:
         kind: console
         encoder:
-            pattern: "{d(%+)(utc)} {h({l})} {m}{n}"
-        filters:
-            - kind: threshold
-              level: info
+            pattern: "{d(%Y-%m-%d %H:%M:%S.%6f %Z)(utc)} {h({l})} [{M}] {m}{n}"
 
 root:
-    level: info
+    level: trace
     appenders:
         - stdout
