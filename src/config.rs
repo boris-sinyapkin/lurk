@@ -17,6 +17,10 @@ pub struct LurkConfig {
     /// IPv4 to listen on
     #[clap(short, long, default_value = "127.0.0.1")]
     ipv4: Option<Ipv4Addr>,
+
+    /// Disable authentication of clients
+    #[clap(long, default_value_t = true)]
+    no_auth: bool
 }
 
 impl LurkConfig {
@@ -26,5 +30,9 @@ impl LurkConfig {
 
     pub fn ipv4(&self) -> Ipv4Addr {
         self.ipv4.expect("IPv4 should have correct format")
+    }
+
+    pub fn auth_enabled(&self) -> bool {
+        !self.no_auth
     }
 }

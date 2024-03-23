@@ -1,16 +1,14 @@
 pub mod socks5 {
-
-    use anyhow::Result;
-    use log::{error, trace};
-    use std::fmt::Write;
-    use tokio::io::AsyncReadExt;
-
     ///
     /// Socks5 protocol implementation details
     ///
     /// RFC 1928
     /// https://datatracker.ietf.org/doc/html/rfc1928#ref-1
     ///
+    use anyhow::Result;
+    use log::{error, trace};
+    use std::{collections::HashSet, fmt::Write};
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     #[rustfmt::skip]
     mod consts {
@@ -26,7 +24,7 @@ pub mod socks5 {
 
     #[repr(u8)]
     #[rustfmt::skip]
-    #[derive(Debug)]
+    #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
     pub enum AuthMethod {
         None,
         GssAPI,
@@ -52,12 +50,20 @@ pub mod socks5 {
         }
     }
 
-    pub struct AuthMethodRequest {
-        auth_methods: Vec<AuthMethod>,
+    // The client connects to the server, and sends a
+    // version identifier/method selection message:
+    // +----+----------+----------+
+    // |VER | NMETHODS | METHODS  |
+    // +----+----------+----------+
+    // | 1  |    1     | 1 to 255 |
+    // +----+----------+----------+
+
+    pub struct HandshakeRequest {
+        auth_methods: HashSet<AuthMethod>,
     }
 
-    impl AuthMethodRequest {
-        pub async fn from<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<AuthMethodRequest> {
+    impl HandshakeRequest {
+        pub async fn parse_from<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<HandshakeRequest> {
             let mut header: [u8; 2] = [0, 0];
             stream.read_exact(&mut header).await?;
 
@@ -70,7 +76,7 @@ pub mod socks5 {
 
             // Parse requested auth methods.
             let auth_methods = match nmethods {
-                0 => vec![],
+                0 => HashSet::new(),
                 n => {
                     let mut methods = vec![0; n.into()];
                     stream.read_exact(&mut methods).await?;
@@ -90,18 +96,41 @@ pub mod socks5 {
             };
 
             trace!(
-                "version: {version:#2x}, nmethods: {nmethods:#02x}, methods: [ {}]",
+                "handshake request: version: {version:#2x}, nmethods: {nmethods:#02x}, methods: [ {}]",
                 auth_methods.iter().fold(String::new(), |mut output, m| {
                     let _ = write!(output, "{m:?} ");
                     output
                 })
             );
 
-            Ok(AuthMethodRequest { auth_methods })
+            Ok(HandshakeRequest { auth_methods })
         }
 
-        pub fn auth_methods(&self) -> &Vec<AuthMethod> {
+        pub fn auth_methods(&self) -> &HashSet<AuthMethod> {
             &self.auth_methods
+        }
+    }
+
+    // The server selects from one of the methods given in METHODS, and
+    // sends a METHOD selection message:
+    // +----+--------+
+    // |VER | METHOD |
+    // +----+--------+
+    // | 1  |   1    |
+    // +----+--------+
+
+    pub struct HandshakeResponse {
+        selected_method: AuthMethod,
+    }
+
+    impl HandshakeResponse {
+        pub fn new(selected_method: AuthMethod) -> HandshakeResponse {
+            HandshakeResponse { selected_method }
+        }
+
+        pub async fn write_to<T: AsyncWriteExt + Unpin>(&self, stream: &mut T) -> Result<()> {
+            let response: [u8; 2] = [consts::SOCKS5_VERSION, self.selected_method as u8];
+            Ok(stream.write_all(&response).await?)
         }
     }
 }
