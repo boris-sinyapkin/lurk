@@ -9,7 +9,7 @@ use std::{
     collections::HashSet,
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
 };
-use tokio::net::{TcpListener, TcpStream};
+use tokio::{io::copy_bidirectional, net::{TcpListener, TcpStream}};
 
 pub struct LurkServer {
     addr: SocketAddr,
@@ -98,7 +98,7 @@ impl LurkConnectionHandler {
     }
 
     async fn handle_connect(&self, client: &mut LurkClient, dest_addr: &Address) -> Result<()> {
-        let stream = match dest_addr {
+        let mut dest_stream = match dest_addr {
             Address::SocketAddress(sock_addr) => TcpStream::connect(sock_addr).await?,
             Address::DomainName(_, _) => todo!(),
         };
@@ -106,6 +106,9 @@ impl LurkConnectionHandler {
         debug!("TCP connection has been established with the destination {:?}", dest_addr);
         client.write_relay_response(self.bound_addr, ReplyStatus::Succeeded).await?;
 
+        // Start data relaying.
+        client.relay(&mut dest_stream).await;
+        
         Ok(())
     }
 

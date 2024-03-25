@@ -1,10 +1,10 @@
-use anyhow::{Ok, Result};
+use anyhow::Result;
 use log::trace;
-use std::net::SocketAddr;
-use tokio::net::TcpStream;
+use std::{fmt::Debug, net::SocketAddr};
+use tokio::{io::copy_bidirectional, net::TcpStream};
 
 use crate::proto::{
-    message::LurkMessageHandler,
+    message::{LurkMessageHandler, LurkResponse},
     socks5::{Address, AuthMethod, HandshakeRequest, HandshakeResponse, RelayRequest, RelayResponse, ReplyStatus},
 };
 
@@ -20,6 +20,13 @@ impl LurkClient {
 
     pub fn addr(&self) -> &SocketAddr {
         &self.addr
+    }
+
+    pub async fn relay(&mut self, dest_stream: &mut TcpStream) {
+        match copy_bidirectional(&mut self.stream, dest_stream).await {
+            Ok((rn, wn)) => trace!("(bypassed) closed, L2R {} bytes, R2L {} bytes", rn, wn),
+            Err(err) => trace!("closed with error: {}", err),
+        }
     }
 
     /// Handle "handshake" request. According to SOCKS5 protocol definition, it contains
@@ -38,13 +45,17 @@ impl LurkClient {
 
     /// Writes response to RelayRequest
     pub async fn write_handshake_response(&mut self, selected_method: AuthMethod) -> Result<()> {
-        let response = HandshakeResponse::new(selected_method);
-        LurkMessageHandler::write_response(&mut self.stream, response).await?;
-        Ok(())
+        self.write_response_to_stream(HandshakeResponse::new(selected_method))
+            .await
     }
 
+    /// Writes response to ReplyResponse
     pub async fn write_relay_response(&mut self, bound_addr: SocketAddr, status: ReplyStatus) -> Result<()> {
-        let response = RelayResponse::new(Address::SocketAddress(bound_addr), status);
+        self.write_response_to_stream(RelayResponse::new(Address::SocketAddress(bound_addr), status))
+            .await
+    }
+
+    async fn write_response_to_stream<R: LurkResponse + Debug>(&mut self, response: R) -> Result<()> {
         LurkMessageHandler::write_response(&mut self.stream, response).await?;
         Ok(())
     }
