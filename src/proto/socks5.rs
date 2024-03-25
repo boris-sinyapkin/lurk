@@ -5,13 +5,12 @@
 /// https://datatracker.ietf.org/doc/html/rfc1928#ref-1
 ///
 use anyhow::Result;
-use core::fmt;
-use log::error;
+use bytes::{BufMut, BytesMut};
+use log::{error, info};
 use std::{
     collections::HashSet,
-    fmt::Write,
-    io::Cursor,
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+    fmt::{self, Display},
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
@@ -124,19 +123,41 @@ pub enum Address {
 }
 
 impl Address {
-    pub async fn parse_from<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Address> {
+    pub async fn read_from<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Address> {
         use consts::address::*;
         let address_type = stream.read_u8().await?;
 
         match address_type {
-            SOCKS5_ADDR_TYPE_IPV4 => Address::parse_ipv4(stream).await,
-            SOCKS5_ADDR_TYPE_IPV6 => todo!(),
-            SOCKS5_ADDR_TYPE_DOMAIN_NAME => Address::parse_domain_name(stream).await,
+            SOCKS5_ADDR_TYPE_IPV4 => Address::read_ipv4(stream).await,
+            SOCKS5_ADDR_TYPE_IPV6 => Address::read_ipv6(stream).await,
+            SOCKS5_ADDR_TYPE_DOMAIN_NAME => Address::read_domain_name(stream).await,
             _ => todo!(),
         }
     }
 
-    async fn parse_ipv4<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Address> {
+    pub fn write_to<T: BufMut>(&self, buf: &mut T) {
+        match self {
+            Address::SocketAddress(SocketAddr::V4(ipv4_addr)) => Address::write_ipv4(buf, ipv4_addr),
+            Address::SocketAddress(SocketAddr::V6(ipv6_addr)) => Address::write_ipv6(buf, ipv6_addr),
+            Address::DomainName(name, port) => Address::write_domain_name(buf, name, port),
+        }
+    }
+
+    fn write_ipv4<T: BufMut>(bytes: &mut T, ipv4_addr: &SocketAddrV4) {
+        bytes.put_u8(consts::address::SOCKS5_ADDR_TYPE_IPV4);
+        bytes.put_slice(&ipv4_addr.ip().octets());
+        bytes.put_u16(ipv4_addr.port());
+    }
+
+    fn write_ipv6<T: BufMut>(bytes: &mut T, ipv6_addr: &SocketAddrV6) {
+        todo!()
+    }
+
+    fn write_domain_name<T: BufMut>(bytes: &mut T, name: &str, port: &u16) {
+        todo!()
+    }
+
+    async fn read_ipv4<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Address> {
         let ipv4 = Ipv4Addr::from(stream.read_u32().await?);
         let port = stream.read_u16().await?;
         let sock = SocketAddr::V4(SocketAddrV4::new(ipv4, port));
@@ -144,11 +165,11 @@ impl Address {
         Ok(Address::SocketAddress(sock))
     }
 
-    fn parse_ipv6<T: AsRef<[u8]>>(cursor: &mut Cursor<T>) -> Result<Address> {
+    async fn read_ipv6<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Address> {
         todo!()
     }
 
-    async fn parse_domain_name<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Address> {
+    async fn read_domain_name<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Address> {
         let len = stream.read_u8().await?;
         let mut buf = vec![0u8; len as usize];
         stream.read_exact(&mut buf).await?;
@@ -158,19 +179,6 @@ impl Address {
 
         Ok(Address::DomainName(name, port))
     }
-}
-
-pub enum Reply {
-    Succeeded,
-    GeneralFailure,
-    ConnectionNotAllowed,
-    NetworkUnreachable,
-    HostUnreachable,
-    ConnectionRefused,
-    TtlExpired,
-    CommandNotSupported,
-    AddressTypeNotSupported,
-    OtherReply(u8),
 }
 
 // The client connects to the server, and sends a
@@ -193,7 +201,10 @@ impl HandshakeRequest {
 }
 
 impl LurkRequest for HandshakeRequest {
-    async fn read_from<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Self> where Self: std::marker::Sized {
+    async fn read_from<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Self>
+    where
+        Self: std::marker::Sized,
+    {
         let mut header: [u8; 2] = [0, 0];
         stream.read_exact(&mut header).await?;
 
@@ -249,12 +260,13 @@ impl HandshakeResponse {
 impl LurkResponse for HandshakeResponse {
     async fn write_to<T: AsyncWriteExt + Unpin>(&self, stream: &mut T) -> Result<()> {
         let response: [u8; 2] = [consts::SOCKS5_VERSION, self.selected_method as u8];
-        Ok(stream.write_all(&response).await?)
+        stream.write_all(&response).await?;
+        Ok(())
     }
 }
 
-// The SOCKS request information is sent by the client as 
-// soon as it has established a connection to the SOCKS 
+// The SOCKS request information is sent by the client as
+// soon as it has established a connection to the SOCKS
 // server, and completed the authentication negotiations.
 // +----+-----+-------+------+----------+----------+
 // |VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
@@ -289,9 +301,77 @@ impl LurkRequest for RelayRequest {
         expect_field_or_fail!(reserved, 0x00);
 
         let command = Command::try_from(cmd)?;
-        let dst_addr = Address::parse_from(stream).await?;
+        let dst_addr = Address::read_from(stream).await?;
 
         Ok(RelayRequest { command, dst_addr })
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum ReplyStatus {
+    Succeeded,
+    GeneralFailure,
+    ConnectionNotAllowed,
+    NetworkUnreachable,
+    HostUnreachable,
+    ConnectionRefused,
+    TtlExpired,
+    CommandNotSupported,
+    AddressTypeNotSupported,
+    OtherReply(u8),
+}
+
+impl ReplyStatus {
+    #[inline]
+    #[rustfmt::skip]
+    pub fn as_u8(self) -> u8 {
+        match self {
+            ReplyStatus::Succeeded => consts::reply::SOCKS5_REPLY_SUCCEEDED,
+            ReplyStatus::GeneralFailure => consts::reply::SOCKS5_REPLY_GENERAL_FAILURE,
+            ReplyStatus::ConnectionNotAllowed => consts::reply::SOCKS5_REPLY_CONNECTION_NOT_ALLOWED,
+            ReplyStatus::NetworkUnreachable => consts::reply::SOCKS5_REPLY_NETWORK_UNREACHABLE,
+            ReplyStatus::HostUnreachable => consts::reply::SOCKS5_REPLY_HOST_UNREACHABLE,
+            ReplyStatus::ConnectionRefused => consts::reply::SOCKS5_REPLY_CONNECTION_REFUSED,
+            ReplyStatus::TtlExpired => consts::reply::SOCKS5_REPLY_TTL_EXPIRED,
+            ReplyStatus::CommandNotSupported => consts::reply::SOCKS5_REPLY_COMMAND_NOT_SUPPORTED,
+            ReplyStatus::AddressTypeNotSupported => consts::reply::SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED,
+            ReplyStatus::OtherReply(c) => c,
+        }
+    }
+
+    #[inline]
+    #[rustfmt::skip]
+    pub fn from_u8(code: u8) -> ReplyStatus {
+        match code {
+            consts::reply::SOCKS5_REPLY_SUCCEEDED => ReplyStatus::Succeeded,
+            consts::reply::SOCKS5_REPLY_GENERAL_FAILURE => ReplyStatus::GeneralFailure,
+            consts::reply::SOCKS5_REPLY_CONNECTION_NOT_ALLOWED => ReplyStatus::ConnectionNotAllowed,
+            consts::reply::SOCKS5_REPLY_NETWORK_UNREACHABLE => ReplyStatus::NetworkUnreachable,
+            consts::reply::SOCKS5_REPLY_HOST_UNREACHABLE => ReplyStatus::HostUnreachable,
+            consts::reply::SOCKS5_REPLY_CONNECTION_REFUSED => ReplyStatus::ConnectionRefused,
+            consts::reply::SOCKS5_REPLY_TTL_EXPIRED => ReplyStatus::TtlExpired,
+            consts::reply::SOCKS5_REPLY_COMMAND_NOT_SUPPORTED => ReplyStatus::CommandNotSupported,
+            consts::reply::SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED => ReplyStatus::AddressTypeNotSupported,
+            _ => ReplyStatus::OtherReply(code),
+        }
+    }
+}
+
+impl Display for ReplyStatus {
+    #[rustfmt::skip]
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            ReplyStatus::Succeeded => write!(f, "Succeeded"),
+            ReplyStatus::AddressTypeNotSupported => write!(f, "Address type not supported"),
+            ReplyStatus::CommandNotSupported => write!(f, "Command not supported"),
+            ReplyStatus::ConnectionNotAllowed => write!(f, "Connection not allowed"),
+            ReplyStatus::ConnectionRefused => write!(f, "Connection refused"),
+            ReplyStatus::GeneralFailure => write!(f, "General failure"),
+            ReplyStatus::HostUnreachable => write!(f, "Host unreachable"),
+            ReplyStatus::NetworkUnreachable => write!(f, "Network unreachable"),
+            ReplyStatus::OtherReply(u) => write!(f, "Other reply ({u})"),
+            ReplyStatus::TtlExpired => write!(f, "TTL expired"),
+        }
     }
 }
 
@@ -302,8 +382,24 @@ impl LurkRequest for RelayRequest {
 // | 1  |  1  | X'00' |  1   | Variable |    2     |
 // +----+-----+-------+------+----------+----------+
 
+#[derive(Debug)]
 pub struct RelayResponse {
     bound_addr: Address,
-    bound_port: u16,
+    status: ReplyStatus,
 }
 
+impl RelayResponse {
+    pub fn new(bound_addr: Address, status: ReplyStatus) -> RelayResponse {
+        RelayResponse { bound_addr, status }
+    }
+}
+
+impl LurkResponse for RelayResponse {
+    async fn write_to<T: AsyncWriteExt + Unpin>(&self, stream: &mut T) -> Result<()> {
+        let mut bytes = BytesMut::new();
+        bytes.put_slice(&[consts::SOCKS5_VERSION, self.status.as_u8(), 0x00]);
+        self.bound_addr.write_to(&mut bytes);
+        stream.write_all(&bytes).await?;
+        Ok(())
+    }
+}

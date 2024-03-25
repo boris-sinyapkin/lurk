@@ -2,7 +2,7 @@ appenders:
     stdout:
         kind: console
         encoder:
-            pattern: "{d(%Y-%m-%d %H:%M:%S.%6f %Z)(utc)} {h({l})} [{M}] {m}{n}"
+            pattern: "{h({d(%Y-%m-%d %H:%M:%S.%6f %Z)(utc)} {l} [{M}])} {m}{n}"
 
 root:
     level: trace
