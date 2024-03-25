@@ -277,7 +277,7 @@ impl LurkResponse for HandshakeResponse {
 #[derive(Debug)]
 pub struct RelayRequest {
     command: Command,
-    dst_addr: Address,
+    target_addr: Address,
 }
 
 impl RelayRequest {
@@ -285,8 +285,8 @@ impl RelayRequest {
         &self.command
     }
 
-    pub fn dest_addr(&self) -> &Address {
-        &self.dst_addr
+    pub fn target_addr(&self) -> &Address {
+        &self.target_addr
     }
 }
 
@@ -301,9 +301,9 @@ impl LurkRequest for RelayRequest {
         expect_field_or_fail!(reserved, 0x00);
 
         let command = Command::try_from(cmd)?;
-        let dst_addr = Address::read_from(stream).await?;
+        let target_addr = Address::read_from(stream).await?;
 
-        Ok(RelayRequest { command, dst_addr })
+        Ok(RelayRequest { command, target_addr })
     }
 }
 
