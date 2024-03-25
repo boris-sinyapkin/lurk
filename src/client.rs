@@ -1,8 +1,9 @@
 use anyhow::{Ok, Result};
+use log::trace;
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
 
-use crate::proto::socks5::{AuthMethod, HandshakeRequest, HandshakeResponse};
+use crate::proto::socks5::{HandshakeRequest, HandshakeResponse, RelayRequest};
 
 pub struct LurkClient {
     addr: SocketAddr,
@@ -18,13 +19,25 @@ impl LurkClient {
         &self.addr
     }
 
+    /// Handle "handshake" request. According to SOCKS5 protocol definition, it contains
+    /// supported by client auth methods that server can use to proceed with further negotiation.
     pub async fn read_handshake_request(&mut self) -> Result<HandshakeRequest> {
-        // Handle "handshake" request. According to SOCKS5 protocol definition, it contains
-        // supported by client auth methods that server can use to proceed with further negotiation.
-        HandshakeRequest::parse_from(&mut self.stream).await
+        let request = HandshakeRequest::parse_from(&mut self.stream).await?;
+        trace!("Read {} from {}", request, self.addr());
+        Ok(request)
     }
 
-    pub async fn write_handshake_response(&mut self, response: HandshakeResponse) -> Result<()> {
-        Ok(response.write_to(&mut self.stream).await?)
+    /// Handle traffic relay request from client. Expected to be sent from client right after authentication phase.
+    pub async fn read_relay_request(&mut self) -> Result<RelayRequest> {
+        let request = RelayRequest::parse_from(&mut self.stream).await?;
+        trace!("Read {} from {}", request, self.addr());
+        Ok(request)
+    }
+
+    /// Writes response to RelayRequest
+    pub async fn write_handshake_response(&mut self, response: &HandshakeResponse) -> Result<()> {
+        response.write_to(&mut self.stream).await?;
+        trace!("Write {} to {}", response, self.addr());
+        Ok(())
     }
 }

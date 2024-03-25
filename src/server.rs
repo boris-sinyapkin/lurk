@@ -1,6 +1,10 @@
-use crate::{auth::LurkAuthenticator, client::LurkClient, proto::socks5::{AuthMethod, HandshakeResponse}};
+use crate::{
+    auth::LurkAuthenticator,
+    client::LurkClient,
+    proto::socks5::{AuthMethod, HandshakeResponse},
+};
 use anyhow::Result;
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 use std::{
     collections::HashSet,
     net::{Ipv4Addr, SocketAddr},
@@ -65,11 +69,21 @@ impl LurkConnectionHandler {
 
         // Choose authentication method.
         let selected_method = self.select_auth_method(handshake_request.auth_methods())?;
-        debug!("Selected auth method '{:?}' for client {}", selected_method, client.addr());
+        debug!(
+            "Selected auth method '{:?}' for client {}",
+            selected_method,
+            client.addr()
+        );
 
         // Tell chosen method to client.
         let handshake_response = HandshakeResponse::new(selected_method);
-        client.write_handshake_response(handshake_response).await?;
+        client.write_handshake_response(&handshake_response).await?;
+
+        // Complete authentication.
+        LurkAuthenticator::authenticate(client, selected_method);
+
+        // Handle relay request
+        let relay_request = client.read_relay_request().await?;
 
         Ok(())
     }
