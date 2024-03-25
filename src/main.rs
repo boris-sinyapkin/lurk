@@ -7,8 +7,8 @@ use server::LurkServer;
 mod auth;
 mod client;
 mod config;
-mod proto;
 mod server;
+mod proto;
 
 #[tokio::main]
 async fn main() -> Result<()> {

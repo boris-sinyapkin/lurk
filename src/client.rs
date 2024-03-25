@@ -3,7 +3,11 @@ use log::trace;
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
 
-use crate::proto::socks5::{HandshakeRequest, HandshakeResponse, RelayRequest};
+use crate::proto::{
+    message::LurkRequest,
+    message::LurkResponse,
+    socks5::{HandshakeRequest, HandshakeResponse, RelayRequest},
+};
 
 pub struct LurkClient {
     addr: SocketAddr,
@@ -22,14 +26,14 @@ impl LurkClient {
     /// Handle "handshake" request. According to SOCKS5 protocol definition, it contains
     /// supported by client auth methods that server can use to proceed with further negotiation.
     pub async fn read_handshake_request(&mut self) -> Result<HandshakeRequest> {
-        let request = HandshakeRequest::parse_from(&mut self.stream).await?;
+        let request = HandshakeRequest::read_from(&mut self.stream).await?;
         trace!("Read {} from {}", request, self.addr());
         Ok(request)
     }
 
     /// Handle traffic relay request from client. Expected to be sent from client right after authentication phase.
     pub async fn read_relay_request(&mut self) -> Result<RelayRequest> {
-        let request = RelayRequest::parse_from(&mut self.stream).await?;
+        let request = RelayRequest::read_from(&mut self.stream).await?;
         trace!("Read {} from {}", request, self.addr());
         Ok(request)
     }
