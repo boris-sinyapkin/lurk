@@ -27,21 +27,21 @@ impl LurkClient {
     /// supported by client auth methods that server can use to proceed with further negotiation.
     pub async fn read_handshake_request(&mut self) -> Result<HandshakeRequest> {
         let request = HandshakeRequest::read_from(&mut self.stream).await?;
-        trace!("Read {} from {}", request, self.addr());
+        trace!("Read {:?} from {}", request, self.addr());
         Ok(request)
     }
 
     /// Handle traffic relay request from client. Expected to be sent from client right after authentication phase.
     pub async fn read_relay_request(&mut self) -> Result<RelayRequest> {
         let request = RelayRequest::read_from(&mut self.stream).await?;
-        trace!("Read {} from {}", request, self.addr());
+        trace!("Read {:?} from {}", request, self.addr());
         Ok(request)
     }
 
     /// Writes response to RelayRequest
     pub async fn write_handshake_response(&mut self, response: &HandshakeResponse) -> Result<()> {
         response.write_to(&mut self.stream).await?;
-        trace!("Write {} to {}", response, self.addr());
+        trace!("Write {:?} to {}", response, self.addr());
         Ok(())
     }
 }

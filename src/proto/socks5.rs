@@ -181,6 +181,7 @@ pub enum Reply {
 // | 1  |    1     | 1 to 255 |
 // +----+----------+----------+
 
+#[derive(Debug)]
 pub struct HandshakeRequest {
     auth_methods: HashSet<AuthMethod>,
 }
@@ -226,19 +227,6 @@ impl LurkRequest for HandshakeRequest {
     }
 }
 
-impl std::fmt::Display for HandshakeRequest {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "HandshakeRequest [ auth_methods: [ {}] ]",
-            self.auth_methods.iter().fold(String::new(), |mut output, m| {
-                let _ = write!(output, "{m:?} ");
-                output
-            })
-        )
-    }
-}
-
 // The server selects from one of the methods given in METHODS, and
 // sends a METHOD selection message:
 // +----+--------+
@@ -265,23 +253,29 @@ impl LurkResponse for HandshakeResponse {
     }
 }
 
-impl std::fmt::Display for HandshakeResponse {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "HandshakeResponse [ selected_method: {:?} ]", self.selected_method)
-    }
-}
-
-// Once the method-dependent subnegotiation has completed, the client
-// sends the request details.
+// The SOCKS request information is sent by the client as 
+// soon as it has established a connection to the SOCKS 
+// server, and completed the authentication negotiations.
 // +----+-----+-------+------+----------+----------+
 // |VER | CMD |  RSV  | ATYP | DST.ADDR | DST.PORT |
 // +----+-----+-------+------+----------+----------+
 // | 1  |  1  | X'00' |  1   | Variable |    2     |
 // +----+-----+-------+------+----------+----------+
 
+#[derive(Debug)]
 pub struct RelayRequest {
     command: Command,
     dst_addr: Address,
+}
+
+impl RelayRequest {
+    pub fn command(&self) -> &Command {
+        &self.command
+    }
+
+    pub fn dest_addr(&self) -> &Address {
+        &self.dst_addr
+    }
 }
 
 impl LurkRequest for RelayRequest {
@@ -301,21 +295,7 @@ impl LurkRequest for RelayRequest {
     }
 }
 
-impl std::fmt::Display for RelayRequest {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "RelayRequest [ command: {:?}, dst_address: {:?} ]",
-            self.command, self.dst_addr
-        )
-    }
-}
-
-// The SOCKS request information is sent by the client as soon as it has
-// established a connection to the SOCKS server, and completed the
-// authentication negotiations.  The server evaluates the request, and
-// returns a reply formed as follows:
-
+// The server evaluates the relay request, and returns a reply formed as follows:
 // +----+-----+-------+------+----------+----------+
 // |VER | REP |  RSV  | ATYP | BND.ADDR | BND.PORT |
 // +----+-----+-------+------+----------+----------+

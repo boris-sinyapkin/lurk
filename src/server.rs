@@ -1,7 +1,7 @@
 use crate::{
     auth::LurkAuthenticator,
     client::LurkClient,
-    proto::socks5::{AuthMethod, HandshakeResponse},
+    proto::socks5::{self, AuthMethod, HandshakeResponse},
 };
 use anyhow::Result;
 use log::{debug, error, info, trace, warn};
@@ -66,7 +66,7 @@ impl LurkConnectionHandler {
     async fn handle_client(&self, client: &mut LurkClient) -> Result<()> {
         // Obtain client authentication methods from SOCKS5 hanshake message.
         let handshake_request = client.read_handshake_request().await?;
-
+        
         // Choose authentication method.
         let selected_method = self.select_auth_method(handshake_request.auth_methods())?;
         debug!(
@@ -84,6 +84,12 @@ impl LurkConnectionHandler {
 
         // Handle relay request
         let relay_request = client.read_relay_request().await?;
+
+        match relay_request.command() {
+            socks5::Command::Connect => todo!(),
+            socks5::Command::Bind => todo!(),
+            socks5::Command::UdpAssociate => todo!(),
+        }
 
         Ok(())
     }
