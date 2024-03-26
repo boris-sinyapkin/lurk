@@ -322,55 +322,19 @@ pub enum ReplyStatus {
 }
 
 impl ReplyStatus {
-    #[inline]
     #[rustfmt::skip]
     pub fn as_u8(self) -> u8 {
         match self {
-            ReplyStatus::Succeeded => consts::reply::SOCKS5_REPLY_SUCCEEDED,
-            ReplyStatus::GeneralFailure => consts::reply::SOCKS5_REPLY_GENERAL_FAILURE,
-            ReplyStatus::ConnectionNotAllowed => consts::reply::SOCKS5_REPLY_CONNECTION_NOT_ALLOWED,
-            ReplyStatus::NetworkUnreachable => consts::reply::SOCKS5_REPLY_NETWORK_UNREACHABLE,
-            ReplyStatus::HostUnreachable => consts::reply::SOCKS5_REPLY_HOST_UNREACHABLE,
-            ReplyStatus::ConnectionRefused => consts::reply::SOCKS5_REPLY_CONNECTION_REFUSED,
-            ReplyStatus::TtlExpired => consts::reply::SOCKS5_REPLY_TTL_EXPIRED,
-            ReplyStatus::CommandNotSupported => consts::reply::SOCKS5_REPLY_COMMAND_NOT_SUPPORTED,
+            ReplyStatus::Succeeded               => consts::reply::SOCKS5_REPLY_SUCCEEDED,
+            ReplyStatus::GeneralFailure          => consts::reply::SOCKS5_REPLY_GENERAL_FAILURE,
+            ReplyStatus::ConnectionNotAllowed    => consts::reply::SOCKS5_REPLY_CONNECTION_NOT_ALLOWED,
+            ReplyStatus::NetworkUnreachable      => consts::reply::SOCKS5_REPLY_NETWORK_UNREACHABLE,
+            ReplyStatus::HostUnreachable         => consts::reply::SOCKS5_REPLY_HOST_UNREACHABLE,
+            ReplyStatus::ConnectionRefused       => consts::reply::SOCKS5_REPLY_CONNECTION_REFUSED,
+            ReplyStatus::TtlExpired              => consts::reply::SOCKS5_REPLY_TTL_EXPIRED,
+            ReplyStatus::CommandNotSupported     => consts::reply::SOCKS5_REPLY_COMMAND_NOT_SUPPORTED,
             ReplyStatus::AddressTypeNotSupported => consts::reply::SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED,
-            ReplyStatus::OtherReply(c) => c,
-        }
-    }
-
-    #[inline]
-    #[rustfmt::skip]
-    pub fn from_u8(code: u8) -> ReplyStatus {
-        match code {
-            consts::reply::SOCKS5_REPLY_SUCCEEDED => ReplyStatus::Succeeded,
-            consts::reply::SOCKS5_REPLY_GENERAL_FAILURE => ReplyStatus::GeneralFailure,
-            consts::reply::SOCKS5_REPLY_CONNECTION_NOT_ALLOWED => ReplyStatus::ConnectionNotAllowed,
-            consts::reply::SOCKS5_REPLY_NETWORK_UNREACHABLE => ReplyStatus::NetworkUnreachable,
-            consts::reply::SOCKS5_REPLY_HOST_UNREACHABLE => ReplyStatus::HostUnreachable,
-            consts::reply::SOCKS5_REPLY_CONNECTION_REFUSED => ReplyStatus::ConnectionRefused,
-            consts::reply::SOCKS5_REPLY_TTL_EXPIRED => ReplyStatus::TtlExpired,
-            consts::reply::SOCKS5_REPLY_COMMAND_NOT_SUPPORTED => ReplyStatus::CommandNotSupported,
-            consts::reply::SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED => ReplyStatus::AddressTypeNotSupported,
-            _ => ReplyStatus::OtherReply(code),
-        }
-    }
-}
-
-impl Display for ReplyStatus {
-    #[rustfmt::skip]
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match *self {
-            ReplyStatus::Succeeded => write!(f, "Succeeded"),
-            ReplyStatus::AddressTypeNotSupported => write!(f, "Address type not supported"),
-            ReplyStatus::CommandNotSupported => write!(f, "Command not supported"),
-            ReplyStatus::ConnectionNotAllowed => write!(f, "Connection not allowed"),
-            ReplyStatus::ConnectionRefused => write!(f, "Connection refused"),
-            ReplyStatus::GeneralFailure => write!(f, "General failure"),
-            ReplyStatus::HostUnreachable => write!(f, "Host unreachable"),
-            ReplyStatus::NetworkUnreachable => write!(f, "Network unreachable"),
-            ReplyStatus::OtherReply(u) => write!(f, "Other reply ({u})"),
-            ReplyStatus::TtlExpired => write!(f, "TTL expired"),
+            ReplyStatus::OtherReply(other)       => other,
         }
     }
 }
