@@ -4,7 +4,7 @@
 /// RFC 1928
 /// https://datatracker.ietf.org/doc/html/rfc1928#ref-1
 ///
-use anyhow::Result;
+use anyhow::{anyhow, bail, ensure, Result};
 use bytes::{BufMut, BytesMut};
 use log::{error, info};
 use std::{
@@ -14,15 +14,9 @@ use std::{
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use super::message::{LurkRequest, LurkResponse};
+use crate::proto::InvalidProtoField;
 
-macro_rules! expect_field_or_fail {
-    ($actual: expr, $expected: expr) => {
-        if $actual != $expected {
-            todo!()
-        }
-    };
-}
+use super::message::{LurkRequest, LurkResponse};
 
 #[rustfmt::skip]
 mod consts {
@@ -80,10 +74,7 @@ impl TryFrom<u8> for AuthMethod {
             SOCKS5_AUTH_METHOD_GSSAPI => Ok(AuthMethod::GssAPI),
             SOCKS5_AUTH_METHOD_PASSWORD => Ok(AuthMethod::Password),
             SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE => Ok(AuthMethod::NoAcceptableMethod),
-            _ => Err(Self::Error::msg(format!(
-                "Failed to convert the value {:#02x} to any of SOCKS5 auth. constants",
-                value
-            ))),
+            _ => bail!(InvalidProtoField::AuthMethod(value)),
         }
     }
 }
@@ -106,10 +97,7 @@ impl TryFrom<u8> for Command {
             SOCKS5_CMD_BIND => Ok(Command::Bind),
             SOCKS5_CMD_CONNECT => Ok(Command::Connect),
             SOCKS5_CMD_UDP_ASSOCIATE => Ok(Command::UdpAssociate),
-            _ => Err(Self::Error::msg(format!(
-                "Failed to convert the value {:#02x} to any of SOCKS5 command constants",
-                value
-            ))),
+            _ => bail!(InvalidProtoField::SocksCommand(value)),
         }
     }
 }
@@ -131,7 +119,7 @@ impl Address {
             SOCKS5_ADDR_TYPE_IPV4 => Address::read_ipv4(stream).await,
             SOCKS5_ADDR_TYPE_IPV6 => Address::read_ipv6(stream).await,
             SOCKS5_ADDR_TYPE_DOMAIN_NAME => Address::read_domain_name(stream).await,
-            _ => todo!(),
+            _ => bail!(InvalidProtoField::AddressType(address_type)),
         }
     }
 
@@ -150,11 +138,11 @@ impl Address {
     }
 
     fn write_ipv6<T: BufMut>(bytes: &mut T, ipv6_addr: &SocketAddrV6) {
-        todo!()
+        todo!("Writing of IPv6 is not implemented")
     }
 
     fn write_domain_name<T: BufMut>(bytes: &mut T, name: &str, port: &u16) {
-        todo!()
+        todo!("Writing of domain names is not implemented")
     }
 
     async fn read_ipv4<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Address> {
@@ -166,7 +154,7 @@ impl Address {
     }
 
     async fn read_ipv6<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Address> {
-        todo!()
+        todo!("Reading of IPv6 is not implemented")
     }
 
     async fn read_domain_name<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Address> {
@@ -211,7 +199,10 @@ impl LurkRequest for HandshakeRequest {
         let (version, nmethods) = (header[0], header[1]);
 
         // Bail out if version is not supported.
-        expect_field_or_fail!(version, consts::SOCKS5_VERSION);
+        ensure!(
+            version == consts::SOCKS5_VERSION,
+            InvalidProtoField::ProtocolVersion(version)
+        );
 
         // Parse requested auth methods.
         let auth_methods = match nmethods {
@@ -297,8 +288,11 @@ impl LurkRequest for RelayRequest {
 
         let (version, cmd, reserved) = (buff[0], buff[1], buff[2]);
 
-        expect_field_or_fail!(version, consts::SOCKS5_VERSION);
-        expect_field_or_fail!(reserved, 0x00);
+        ensure!(
+            version == consts::SOCKS5_VERSION,
+            InvalidProtoField::ProtocolVersion(version)
+        );
+        ensure!(reserved == 0x00, InvalidProtoField::ReservedValue(reserved));
 
         let command = Command::try_from(cmd)?;
         let target_addr = Address::read_from(stream).await?;
