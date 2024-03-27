@@ -9,6 +9,7 @@ mod client;
 mod config;
 mod server;
 mod proto;
+mod error;
 
 #[tokio::main]
 async fn main() -> Result<()> {

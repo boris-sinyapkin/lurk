@@ -1,22 +1,14 @@
 use anyhow::{anyhow, Result};
-use log::{debug, error, trace};
+use log::{debug, trace};
 use std::{collections::HashSet, fmt::Display, net::SocketAddr};
-use thiserror::Error;
 use tokio::{io::copy_bidirectional, net::TcpStream};
 
 use crate::{
-    auth::LurkAuthenticator,
-    proto::{
+    auth::LurkAuthenticator, error::LurkError, proto::{
         message::LurkStreamWrapper,
         socks5::{Address, AuthMethod, HandshakeRequest, HandshakeResponse, RelayRequest, RelayResponse, ReplyStatus},
-    },
+    }
 };
-
-#[derive(Error, Debug)]
-pub enum LurkClientError {
-    #[error("Unable to agree on authentication method with client {0:?}")]
-    NoAuthMethod(SocketAddr),
-}
 
 pub struct LurkClient {
     addr: SocketAddr,
@@ -44,7 +36,7 @@ impl LurkClient {
         let response = HandshakeResponse::new(method);
         self.stream.write_response(response).await?;
 
-        method.ok_or(anyhow!(LurkClientError::NoAuthMethod(self.addr)))
+        method.ok_or(anyhow!(LurkError::NoAcceptableAuthMethod(self.addr)))
     }
 
     pub async fn read_relay_request(&mut self) -> Result<RelayRequest> {

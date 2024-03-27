@@ -1,9 +1,10 @@
 use crate::{
     auth::LurkAuthenticator,
     client::LurkClient,
+    error::{LurkError, Unsupported},
     proto::socks5::{Address, Command, ReplyStatus},
 };
-use anyhow::{anyhow, Result};
+use anyhow::{bail, Result};
 use log::{debug, error, info, warn};
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use tokio::net::{TcpListener, TcpStream};
@@ -61,36 +62,42 @@ struct LurkConnectionHandler {
 
 impl LurkConnectionHandler {
     async fn handle_client(&self, client: &mut LurkClient) -> Result<()> {
+        // Complete handshake process and negotiate the authentication method.
         let auth_method = client.handshake().await?;
         debug!("Selected auth method '{:?}' for {}", auth_method, client);
 
         // Authenticate client with selected method.
         LurkAuthenticator::authenticate(client, auth_method);
 
-        // Read incoming relay request
-        let relay_request = client.read_relay_request().await?;
-        let target = relay_request.target_addr();
+        // Proceed with SOCKS5 relay handling.
+        // This will receive and process relay request, handle SOCKS5 command
+        // and establish the tunnel "client <-- lurk proxy --> target".
+        if let Err(err) = self.handle_relay(client).await {
+            self.on_handle_relay_error(client, err).await?
+        }
 
-        match relay_request.command() {
-            Command::Connect => self.handle_connect(client, target).await,
-            Command::Bind => todo!(),
-            Command::UdpAssociate => todo!(),
+        Ok(())
+    }
+
+    async fn handle_relay(&self, client: &mut LurkClient) -> Result<()> {
+        let relay_req = client.read_relay_request().await?;
+
+        match relay_req.command() {
+            Command::Connect => self.handle_connect_command(client, relay_req.target_addr()).await,
+            _ => bail!(LurkError::Unsupported(Unsupported::Socks5Command(relay_req.command()))),
         }
     }
 
-    async fn handle_connect(&self, client: &mut LurkClient, target: &Address) -> Result<()> {
+    async fn handle_connect_command(&self, client: &mut LurkClient, target: &Address) -> Result<()> {
         debug!("Handling SOCKS5 CONNECT from {}", client);
+
         // Establish TCP connection with the target host.
-        let mut target_stream = match LurkConnectionHandler::establish_tcp_connection(target).await {
-            Ok(stream) => {
-                debug!("TCP connection has been established with the target {:?}", target);
-                client
-                    .respond_to_relay_request(self.server_addr, ReplyStatus::Succeeded)
-                    .await?;
-                stream
-            }
-            Err(_) => todo!(),
-        };
+        let mut target_stream = LurkConnectionHandler::establish_tcp_connection(target).await?;
+
+        debug!("TCP connection has been established with the target {:?}", target);
+        client
+            .respond_to_relay_request(self.server_addr, ReplyStatus::Succeeded)
+            .await?;
 
         // Start data relaying.
         client.relay_data(&mut target_stream).await;
@@ -101,10 +108,20 @@ impl LurkConnectionHandler {
     async fn establish_tcp_connection(target: &Address) -> Result<TcpStream> {
         let tcp_stream = match target {
             Address::SocketAddress(sock_addr) => TcpStream::connect(sock_addr).await?,
-            Address::DomainName(_, _) => return Err(anyhow!("Domains are not supported")),
+            Address::DomainName(_, _) => bail!(LurkError::Unsupported(Unsupported::DomainNameAddress)),
         };
 
         Ok(tcp_stream)
+    }
+
+    async fn on_handle_relay_error(&self, client: &mut LurkClient, err: anyhow::Error) -> Result<()> {
+        let error = err.to_string();
+        let status = ReplyStatus::from(err);
+        debug!(
+            "Error occured during relay handling from {}. Replied with status '{:?}' (err: '{}')",
+            client, status, error
+        );
+        client.respond_to_relay_request(self.server_addr, status).await
     }
 }
 

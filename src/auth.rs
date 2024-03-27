@@ -7,6 +7,7 @@ pub struct LurkAuthenticator {}
 impl LurkAuthenticator {
     const SUPPORTED_METHODS: [AuthMethod; 1] = [AuthMethod::None];
 
+    #[allow(unused_variables)]
     pub fn authenticate(client: &LurkClient, method: AuthMethod) -> bool {
         match method {
             AuthMethod::None => true,

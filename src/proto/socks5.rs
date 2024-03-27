@@ -13,7 +13,7 @@ use std::{
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-use crate::proto::InvalidProtoField;
+use crate::error::{InvalidValue, LurkError, Unsupported};
 
 use self::consts::auth::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE;
 
@@ -65,15 +65,15 @@ pub enum AuthMethod {
 }
 
 impl TryFrom<u8> for AuthMethod {
-    type Error = anyhow::Error;
+    type Error = LurkError;
 
-    fn try_from(value: u8) -> Result<Self> {
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
         use consts::auth::*;
         match value {
             SOCKS5_AUTH_METHOD_NONE => Ok(AuthMethod::None),
             SOCKS5_AUTH_METHOD_GSSAPI => Ok(AuthMethod::GssAPI),
             SOCKS5_AUTH_METHOD_PASSWORD => Ok(AuthMethod::Password),
-            SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE | _ => bail!(InvalidProtoField::AuthMethod(value)),
+            _ => Err(LurkError::DataError(InvalidValue::AuthMethod(value))),
         }
     }
 }
@@ -88,15 +88,15 @@ pub enum Command {
 }
 
 impl TryFrom<u8> for Command {
-    type Error = anyhow::Error;
+    type Error = LurkError;
 
-    fn try_from(value: u8) -> Result<Self> {
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
         use consts::command::*;
         match value {
             SOCKS5_CMD_BIND => Ok(Command::Bind),
             SOCKS5_CMD_CONNECT => Ok(Command::Connect),
             SOCKS5_CMD_UDP_ASSOCIATE => Ok(Command::UdpAssociate),
-            _ => bail!(InvalidProtoField::SocksCommand(value)),
+            _ => Err(LurkError::DataError(InvalidValue::SocksCommand(value))),
         }
     }
 }
@@ -118,7 +118,7 @@ impl Address {
             SOCKS5_ADDR_TYPE_IPV4 => Address::read_ipv4(stream).await,
             SOCKS5_ADDR_TYPE_IPV6 => Address::read_ipv6(stream).await,
             SOCKS5_ADDR_TYPE_DOMAIN_NAME => Address::read_domain_name(stream).await,
-            _ => bail!(InvalidProtoField::AddressType(address_type)),
+            _ => bail!(LurkError::DataError(InvalidValue::AddressType(address_type))),
         }
     }
 
@@ -136,10 +136,12 @@ impl Address {
         bytes.put_u16(ipv4_addr.port());
     }
 
+    #[allow(unused_variables)]
     fn write_ipv6<T: BufMut>(bytes: &mut T, ipv6_addr: &SocketAddrV6) {
         todo!("Writing of IPv6 is not implemented")
     }
 
+    #[allow(unused_variables)]
     fn write_domain_name<T: BufMut>(bytes: &mut T, name: &str, port: &u16) {
         todo!("Writing of domain names is not implemented")
     }
@@ -152,8 +154,9 @@ impl Address {
         Ok(Address::SocketAddress(sock))
     }
 
+    #[allow(unused_variables)]
     async fn read_ipv6<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Address> {
-        todo!("Reading of IPv6 is not implemented")
+        bail!(LurkError::Unsupported(Unsupported::IPv6Address))
     }
 
     async fn read_domain_name<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Address> {
@@ -161,7 +164,7 @@ impl Address {
         let mut buf = vec![0u8; len as usize];
         stream.read_exact(&mut buf).await?;
 
-        let name = String::from_utf8(buf)?;
+        let name = String::from_utf8(buf).map_err(LurkError::DomainNameDecodingFailed)?;
         let port = stream.read_u16().await?;
 
         Ok(Address::DomainName(name, port))
@@ -200,7 +203,7 @@ impl LurkRequest for HandshakeRequest {
         // Bail out if version is not supported.
         ensure!(
             version == consts::SOCKS5_VERSION,
-            InvalidProtoField::ProtocolVersion(version)
+            InvalidValue::ProtocolVersion(version)
         );
 
         // Parse requested auth methods.
@@ -274,8 +277,8 @@ pub struct RelayRequest {
 }
 
 impl RelayRequest {
-    pub fn command(&self) -> &Command {
-        &self.command
+    pub fn command(&self) -> Command {
+        self.command
     }
 
     pub fn target_addr(&self) -> &Address {
@@ -292,9 +295,9 @@ impl LurkRequest for RelayRequest {
 
         ensure!(
             version == consts::SOCKS5_VERSION,
-            InvalidProtoField::ProtocolVersion(version)
+            InvalidValue::ProtocolVersion(version)
         );
-        ensure!(reserved == 0x00, InvalidProtoField::ReservedValue(reserved));
+        ensure!(reserved == 0x00, InvalidValue::ReservedValue(reserved));
 
         let command = Command::try_from(cmd)?;
         let target_addr = Address::read_from(stream).await?;
@@ -304,6 +307,7 @@ impl LurkRequest for RelayRequest {
 }
 
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub enum ReplyStatus {
     Succeeded,
     GeneralFailure,
@@ -331,6 +335,36 @@ impl ReplyStatus {
             ReplyStatus::CommandNotSupported     => consts::reply::SOCKS5_REPLY_COMMAND_NOT_SUPPORTED,
             ReplyStatus::AddressTypeNotSupported => consts::reply::SOCKS5_REPLY_ADDRESS_TYPE_NOT_SUPPORTED,
             ReplyStatus::OtherReply(other)       => other,
+        }
+    }
+}
+
+impl From<LurkError> for ReplyStatus {
+    fn from(err: LurkError) -> Self {
+        match err {
+            LurkError::Unsupported(unsupported) => match unsupported {
+                Unsupported::Socks5Command(_) => ReplyStatus::CommandNotSupported,
+                Unsupported::IPv6Address | Unsupported::DomainNameAddress => ReplyStatus::AddressTypeNotSupported,
+            },
+            LurkError::NoAcceptableAuthMethod(_) => ReplyStatus::ConnectionNotAllowed,
+            _ => ReplyStatus::GeneralFailure,
+        }
+    }
+}
+
+impl From<anyhow::Error> for ReplyStatus {
+    fn from(err: anyhow::Error) -> Self {
+        let err = match err.downcast::<LurkError>() {
+            Ok(lurk_proto) => return ReplyStatus::from(lurk_proto),
+            Err(err) => err,
+        };
+        match err.downcast::<std::io::Error>() {
+            Ok(io) => match io.kind() {
+                std::io::ErrorKind::ConnectionRefused => ReplyStatus::ConnectionRefused,
+                std::io::ErrorKind::ConnectionAborted => ReplyStatus::HostUnreachable,
+                _ => ReplyStatus::GeneralFailure,
+            },
+            Err(_) => ReplyStatus::GeneralFailure,
         }
     }
 }
