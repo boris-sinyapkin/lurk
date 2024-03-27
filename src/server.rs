@@ -1,14 +1,11 @@
 use crate::{
     auth::LurkAuthenticator,
     client::LurkClient,
-    proto::socks5::{self, Address, AuthMethod, Command, ReplyStatus},
+    proto::socks5::{Address, Command, ReplyStatus},
 };
-use anyhow::Result;
-use log::{debug, error, info, trace, warn};
-use std::{
-    collections::HashSet,
-    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
-};
+use anyhow::{anyhow, Result};
+use log::{debug, error, info, warn};
+use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4};
 use tokio::net::{TcpListener, TcpStream};
 
 pub struct LurkServer {
@@ -18,9 +15,9 @@ pub struct LurkServer {
 
 impl LurkServer {
     pub fn new(ip: Ipv4Addr, port: u16, auth_enabled: bool) -> LurkServer {
-        LurkServer { 
+        LurkServer {
             addr: SocketAddr::V4(SocketAddrV4::new(ip, port)),
-            auth_enabled
+            auth_enabled,
         }
     }
 
@@ -48,11 +45,8 @@ impl LurkServer {
 
     fn on_client_connected(&self, stream: TcpStream, addr: SocketAddr) {
         info!("New connection has been established from {}", addr);
-        let mut client = LurkClient::new(stream, addr);
-        let handler = LurkConnectionHandler {
-            bound_addr: self.addr,
-            auth_enabled: self.auth_enabled,
-        };
+        let mut client = LurkClient::new(stream, addr, self.auth_enabled);
+        let handler = LurkConnectionHandler { server_addr: self.addr };
         tokio::spawn(async move {
             if let Err(err) = handler.handle_client(&mut client).await {
                 error!("Error occured during handling of client {}, {}", addr, err);
@@ -62,71 +56,55 @@ impl LurkServer {
 }
 
 struct LurkConnectionHandler {
-    bound_addr: SocketAddr,
-    auth_enabled: bool,
+    server_addr: SocketAddr,
 }
 
 impl LurkConnectionHandler {
     async fn handle_client(&self, client: &mut LurkClient) -> Result<()> {
-        // Obtain client authentication methods from SOCKS5 hanshake message.
-        let handshake_request = client.read_handshake_request().await?;
-
-        // Choose authentication method.
-        let selected_method = self.select_auth_method(handshake_request.auth_methods())?;
-        debug!(
-            "Selected auth method '{:?}' for client {}",
-            selected_method,
-            client.addr()
-        );
-
-        // Tell chosen method to client.
-        client.write_handshake_response(selected_method).await?;
+        let auth_method = client.handshake().await?;
+        debug!("Selected auth method '{:?}' for {}", auth_method, client);
 
         // Authenticate client with selected method.
-        LurkAuthenticator::authenticate(client, selected_method);
+        LurkAuthenticator::authenticate(client, auth_method);
 
-        // Handle relay request
+        // Read incoming relay request
         let relay_request = client.read_relay_request().await?;
+        let target = relay_request.target_addr();
 
         match relay_request.command() {
-            Command::Connect => self.handle_connect(client, relay_request.target_addr()).await,
+            Command::Connect => self.handle_connect(client, target).await,
             Command::Bind => todo!(),
             Command::UdpAssociate => todo!(),
         }
     }
 
-    async fn handle_connect(&self, client: &mut LurkClient, dest_addr: &Address) -> Result<()> {
-        let mut dest_stream = match dest_addr {
-            Address::SocketAddress(sock_addr) => TcpStream::connect(sock_addr).await?,
-            Address::DomainName(_, _) => todo!(),
+    async fn handle_connect(&self, client: &mut LurkClient, target: &Address) -> Result<()> {
+        debug!("Handling SOCKS5 CONNECT from {}", client);
+        // Establish TCP connection with the target host.
+        let mut target_stream = match LurkConnectionHandler::establish_tcp_connection(target).await {
+            Ok(stream) => {
+                debug!("TCP connection has been established with the target {:?}", target);
+                client
+                    .respond_to_relay_request(self.server_addr, ReplyStatus::Succeeded)
+                    .await?;
+                stream
+            }
+            Err(_) => todo!(),
         };
 
-        debug!("TCP connection has been established with the destination {:?}", dest_addr);
-        client.write_relay_response(self.bound_addr, ReplyStatus::Succeeded).await?;
-
         // Start data relaying.
-        client.relay(&mut dest_stream).await;
-        
+        client.relay_data(&mut target_stream).await;
+
         Ok(())
     }
 
-    fn select_auth_method(&self, client_methods: &HashSet<AuthMethod>) -> Result<AuthMethod> {
-        // Found intersection between available auth methods on server and supported methods by client.
-        let server_methods = LurkAuthenticator::available_methods();
-        let common_methods = server_methods
-            .intersection(client_methods)
-            .collect::<HashSet<&AuthMethod>>();
+    async fn establish_tcp_connection(target: &Address) -> Result<TcpStream> {
+        let tcp_stream = match target {
+            Address::SocketAddress(sock_addr) => TcpStream::connect(sock_addr).await?,
+            Address::DomainName(_, _) => return Err(anyhow!("Domains are not supported")),
+        };
 
-        // Proceed without auth if it's disabled externaly.
-        if !self.auth_enabled {
-            if common_methods.contains(&AuthMethod::None) {
-                Ok(AuthMethod::None)
-            } else {
-                todo!()
-            }
-        } else {
-            todo!()
-        }
+        Ok(tcp_stream)
     }
 }
 

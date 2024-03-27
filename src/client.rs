@@ -1,55 +1,86 @@
-use anyhow::Result;
-use log::{debug, trace};
-use std::net::SocketAddr;
+use anyhow::{anyhow, Result};
+use log::{debug, error, trace};
+use std::{collections::HashSet, fmt::Display, net::SocketAddr};
+use thiserror::Error;
 use tokio::{io::copy_bidirectional, net::TcpStream};
 
-use crate::proto::{
-    message::LurkMessageHandler,
-    socks5::{Address, AuthMethod, HandshakeRequest, HandshakeResponse, RelayRequest, RelayResponse, ReplyStatus},
+use crate::{
+    auth::LurkAuthenticator,
+    proto::{
+        message::LurkStreamWrapper,
+        socks5::{Address, AuthMethod, HandshakeRequest, HandshakeResponse, RelayRequest, RelayResponse, ReplyStatus},
+    },
 };
+
+#[derive(Error, Debug)]
+pub enum LurkClientError {
+    #[error("Unable to agree on authentication method with client {0:?}")]
+    NoAuthMethod(SocketAddr),
+}
 
 pub struct LurkClient {
     addr: SocketAddr,
-    stream: TcpStream,
+    auth_enabled: bool,
+    stream: LurkStreamWrapper<TcpStream>,
 }
 
 impl LurkClient {
-    pub fn new(stream: TcpStream, addr: SocketAddr) -> LurkClient {
-        LurkClient { stream, addr }
-    }
-
-    pub fn addr(&self) -> &SocketAddr {
-        &self.addr
-    }
-
-    pub async fn relay(&mut self, dest_stream: &mut TcpStream) {
-        match copy_bidirectional(&mut self.stream, dest_stream).await {
-            Ok((rn, wn)) => trace!("(bypassed) closed, L2R {} bytes, R2L {} bytes", rn, wn),
-            Err(err) => trace!("closed with error: {}", err),
+    pub fn new(stream: TcpStream, addr: SocketAddr, auth_enabled: bool) -> LurkClient {
+        LurkClient {
+            stream: LurkStreamWrapper::new(stream),
+            addr,
+            auth_enabled,
         }
     }
 
-    /// Handle "handshake" request. According to SOCKS5 protocol definition, it contains
-    /// supported by client auth methods that server can use to proceed with further negotiation.
-    pub async fn read_handshake_request(&mut self) -> Result<HandshakeRequest> {
-        LurkMessageHandler::read_request::<_, HandshakeRequest>(&mut self.stream).await
+    /// Handshaking with client.
+    /// On success, return established authentication method.
+    pub async fn handshake(&mut self) -> Result<AuthMethod> {
+        // Obtain client authentication methods from SOCKS5 hanshake message.
+        let handshake_request = self.stream.read_request::<HandshakeRequest>().await?;
+        // Choose authentication method.
+        let method = self.select_auth_method(handshake_request.auth_methods());
+        // Respond to handshake request.
+        let response = HandshakeResponse::new(method);
+        self.stream.write_response(response).await?;
+
+        method.ok_or(anyhow!(LurkClientError::NoAuthMethod(self.addr)))
     }
 
-    /// Handle traffic relay request from client. Expected to be sent from client right
-    /// after authentication phase.
     pub async fn read_relay_request(&mut self) -> Result<RelayRequest> {
-        LurkMessageHandler::read_request::<_, RelayRequest>(&mut self.stream).await
+        self.stream.read_request::<RelayRequest>().await
     }
 
-    /// Writes response to RelayRequest
-    pub async fn write_handshake_response(&mut self, selected_method: AuthMethod) -> Result<()> {
-        let response = HandshakeResponse::new(selected_method);
-        LurkMessageHandler::write_response(&mut self.stream, response).await
+    pub async fn respond_to_relay_request(&mut self, server_addr: SocketAddr, status: ReplyStatus) -> Result<()> {
+        let response = RelayResponse::new(Address::SocketAddress(server_addr), status);
+        self.stream.write_response(response).await
     }
 
-    /// Writes response to ReplyResponse
-    pub async fn write_relay_response(&mut self, bound_addr: SocketAddr, status: ReplyStatus) -> Result<()> {
-        let response = RelayResponse::new(Address::SocketAddress(bound_addr), status);
-        LurkMessageHandler::write_response(&mut self.stream, response).await
+    pub async fn relay_data(&mut self, target_stream: &mut TcpStream) {
+        debug!("Starting data relaying tunnel for {} ...", self);
+        match copy_bidirectional(&mut *self.stream, target_stream).await {
+            Ok((l2r, r2l)) => trace!("tunnel closed, L2R {} bytes, R2L {} bytes transmitted", l2r, r2l),
+            Err(err) => trace!("tunnel closed with error: {}", err),
+        }
+    }
+
+    fn select_auth_method(&self, client_methods: &HashSet<AuthMethod>) -> Option<AuthMethod> {
+        // Found intersection between available auth methods on server and supported methods by client.
+        let server_methods = LurkAuthenticator::available_methods();
+        let common_methods = server_methods
+            .intersection(client_methods)
+            .collect::<HashSet<&AuthMethod>>();
+
+        if !self.auth_enabled && common_methods.contains(&AuthMethod::None) {
+            return Some(AuthMethod::None);
+        }
+
+        None
+    }
+}
+
+impl Display for LurkClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "client {}", self.addr)
     }
 }

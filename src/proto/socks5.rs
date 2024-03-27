@@ -4,17 +4,18 @@
 /// RFC 1928
 /// https://datatracker.ietf.org/doc/html/rfc1928#ref-1
 ///
-use anyhow::{anyhow, bail, ensure, Result};
+use anyhow::{bail, ensure, Result};
 use bytes::{BufMut, BytesMut};
-use log::{error, info};
+use log::error;
 use std::{
     collections::HashSet,
-    fmt::{self, Display},
     net::{Ipv4Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use crate::proto::InvalidProtoField;
+
+use self::consts::auth::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE;
 
 use super::message::{LurkRequest, LurkResponse};
 
@@ -61,7 +62,6 @@ pub enum AuthMethod {
     None,
     GssAPI,
     Password,
-    NoAcceptableMethod
 }
 
 impl TryFrom<u8> for AuthMethod {
@@ -73,8 +73,7 @@ impl TryFrom<u8> for AuthMethod {
             SOCKS5_AUTH_METHOD_NONE => Ok(AuthMethod::None),
             SOCKS5_AUTH_METHOD_GSSAPI => Ok(AuthMethod::GssAPI),
             SOCKS5_AUTH_METHOD_PASSWORD => Ok(AuthMethod::Password),
-            SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE => Ok(AuthMethod::NoAcceptableMethod),
-            _ => bail!(InvalidProtoField::AuthMethod(value)),
+            SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE | _ => bail!(InvalidProtoField::AuthMethod(value)),
         }
     }
 }
@@ -239,18 +238,21 @@ impl LurkRequest for HandshakeRequest {
 
 #[derive(Debug)]
 pub struct HandshakeResponse {
-    selected_method: AuthMethod,
+    selected_method: Option<AuthMethod>,
 }
 
 impl HandshakeResponse {
-    pub fn new(selected_method: AuthMethod) -> HandshakeResponse {
+    pub fn new(selected_method: Option<AuthMethod>) -> HandshakeResponse {
         HandshakeResponse { selected_method }
     }
 }
 
 impl LurkResponse for HandshakeResponse {
     async fn write_to<T: AsyncWriteExt + Unpin>(&self, stream: &mut T) -> Result<()> {
-        let response: [u8; 2] = [consts::SOCKS5_VERSION, self.selected_method as u8];
+        let method = self
+            .selected_method
+            .map_or_else(|| SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE, |m| m as u8);
+        let response: [u8; 2] = [consts::SOCKS5_VERSION, method];
         stream.write_all(&response).await?;
         Ok(())
     }
@@ -317,7 +319,7 @@ pub enum ReplyStatus {
 
 impl ReplyStatus {
     #[rustfmt::skip]
-    pub fn as_u8(self) -> u8 {
+    fn as_u8(self) -> u8 {
         match self {
             ReplyStatus::Succeeded               => consts::reply::SOCKS5_REPLY_SUCCEEDED,
             ReplyStatus::GeneralFailure          => consts::reply::SOCKS5_REPLY_GENERAL_FAILURE,

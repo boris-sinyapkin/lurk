@@ -1,4 +1,7 @@
-use std::fmt::Debug;
+use std::{
+    fmt::Debug,
+    ops::{Deref, DerefMut},
+};
 
 use anyhow::Result;
 use log::trace;
@@ -14,28 +17,57 @@ pub trait LurkResponse {
     async fn write_to<T: AsyncWriteExt + Unpin>(&self, stream: &mut T) -> Result<()>;
 }
 
-pub struct LurkMessageHandler {}
+pub struct LurkStreamWrapper<Stream>
+where
+    Stream: AsyncReadExt + AsyncWriteExt + Unpin,
+{
+    stream: Stream,
+}
 
-impl LurkMessageHandler {
-    pub async fn read_request<Input, Request>(input: &mut Input) -> Result<Request>
+impl<Stream> LurkStreamWrapper<Stream>
+where
+    Stream: AsyncReadExt + AsyncWriteExt + Unpin,
+{
+    pub fn new(stream: Stream) -> LurkStreamWrapper<Stream> {
+        LurkStreamWrapper { stream }
+    }
+
+    pub async fn read_request<Request>(&mut self) -> Result<Request>
     where
-        Input: AsyncReadExt + Unpin,
         Request: LurkRequest + Debug,
     {
-        let request = Request::read_from(input).await?;
+        let request = Request::read_from(&mut self.stream).await?;
         trace!("Read {:?}", request);
 
         Ok(request)
     }
 
-    pub async fn write_response<Output, Response>(output: &mut Output, response: Response) -> Result<()>
+    pub async fn write_response<Response>(&mut self, response: Response) -> Result<()>
     where
-        Output: AsyncWriteExt + Unpin,
         Response: LurkResponse + Debug,
     {
-        Response::write_to(&response, output).await?;
+        Response::write_to(&response, &mut self.stream).await?;
         trace!("Write {:?}", response);
 
         Ok(())
+    }
+}
+
+impl<Stream> Deref for LurkStreamWrapper<Stream>
+where
+    Stream: AsyncReadExt + AsyncWriteExt + Unpin,
+{
+    type Target = Stream;
+    fn deref(&self) -> &Self::Target {
+        &self.stream
+    }
+}
+
+impl<Stream> DerefMut for LurkStreamWrapper<Stream>
+where
+    Stream: AsyncReadExt + AsyncWriteExt + Unpin,
+{
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.stream
     }
 }
