@@ -4,7 +4,7 @@ use thiserror::Error;
 
 use crate::proto::socks5::Command;
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum LurkError {
     #[error("data has incorrect / corrupted field: {0}")]
     DataError(InvalidValue),
@@ -16,7 +16,7 @@ pub enum LurkError {
     NoAcceptableAuthMethod(SocketAddr),
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum InvalidValue {
     #[error("invalid 'reserved' value {0:#02x}")]
     ReservedValue(u8),
@@ -30,7 +30,7 @@ pub enum InvalidValue {
     SocksCommand(u8),
 }
 
-#[derive(Error, Debug)]
+#[derive(Error, Debug, PartialEq)]
 pub enum Unsupported {
     #[error("{0:?} SOCKS5 command")]
     Socks5Command(Command),

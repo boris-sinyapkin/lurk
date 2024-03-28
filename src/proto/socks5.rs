@@ -19,6 +19,12 @@ use self::consts::auth::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE;
 
 use super::message::{LurkRequest, LurkResponse};
 
+macro_rules! ipv4_socket_address {
+    ($ipv4:expr, $port:expr) => {
+        Address::SocketAddress(SocketAddr::V4(SocketAddrV4::new($ipv4, $port)))
+    };
+}
+
 #[rustfmt::skip]
 mod consts {
     pub const SOCKS5_VERSION: u8 = 0x05;
@@ -149,9 +155,8 @@ impl Address {
     async fn read_ipv4<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Address> {
         let ipv4 = Ipv4Addr::from(stream.read_u32().await?);
         let port = stream.read_u16().await?;
-        let sock = SocketAddr::V4(SocketAddrV4::new(ipv4, port));
 
-        Ok(Address::SocketAddress(sock))
+        Ok(ipv4_socket_address!(ipv4, port))
     }
 
     #[allow(unused_variables)]
@@ -216,14 +221,8 @@ impl LurkRequest for HandshakeRequest {
                 // Drop unknown auth methods.
                 methods
                     .iter()
-                    .filter_map(|&m| match AuthMethod::try_from(m) {
-                        Ok(auth_method) => Some(auth_method),
-                        Err(err) => {
-                            error!("{}", err);
-                            None
-                        }
-                    })
-                    .collect()
+                    .map(|&m| Ok(AuthMethod::try_from(m)?))
+                    .collect::<Result<HashSet<AuthMethod>>>()?
             }
         };
 
@@ -395,5 +394,159 @@ impl LurkResponse for RelayResponse {
         self.bound_addr.write_to(&mut bytes);
         stream.write_all(&bytes).await?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+
+    macro_rules! assert_lurk_err {
+        ($expected:expr, $actual:expr) => {
+            assert_eq!(
+                $expected,
+                $actual.downcast::<LurkError>().expect("Lurk error type expected")
+            )
+        };
+    }
+
+    macro_rules! bail_unless_expected_lurk_err {
+        ($expected_lurk_err:expr, $result:expr) => {
+            match $result {
+                Err(err) => assert_lurk_err!($expected_lurk_err, err),
+                Ok(ok) => panic!("Should fail with error, instead returned {:#?}", ok),
+            }
+        };
+    }
+
+    mod message {
+        use crate::{
+            error::{InvalidValue, LurkError},
+            proto::{
+                message::{LurkRequest, LurkResponse},
+                socks5::{
+                    consts::*, Address, AuthMethod, Command, HandshakeRequest, HandshakeResponse, RelayRequest,
+                    RelayResponse, ReplyStatus,
+                },
+            },
+        };
+        use std::{
+            collections::HashSet,
+            net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+        };
+
+        #[tokio::test]
+        async fn rw_handshake_messages() {
+            let mut read_stream = tokio_test::io::Builder::new()
+                .read(&[
+                    SOCKS5_VERSION,
+                    3,
+                    auth::SOCKS5_AUTH_METHOD_PASSWORD,
+                    auth::SOCKS5_AUTH_METHOD_GSSAPI,
+                    auth::SOCKS5_AUTH_METHOD_NONE,
+                ])
+                .read(&[SOCKS5_VERSION, 1, auth::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE])
+                .build();
+
+            let request = HandshakeRequest::read_from(&mut read_stream)
+                .await
+                .expect("Handshale request should be parsed");
+
+            assert_eq!(
+                &HashSet::from([AuthMethod::Password, AuthMethod::GssAPI, AuthMethod::None]),
+                request.auth_methods(),
+                "Handshake request parsed incorrectly"
+            );
+
+            bail_unless_expected_lurk_err!(
+                LurkError::DataError(InvalidValue::AuthMethod(auth::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE)),
+                HandshakeRequest::read_from(&mut read_stream).await
+            );
+
+            let mut write_stream = tokio_test::io::Builder::new()
+                .write(&[SOCKS5_VERSION, auth::SOCKS5_AUTH_METHOD_GSSAPI])
+                .write(&[SOCKS5_VERSION, auth::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE])
+                .build();
+
+            HandshakeResponse::new(Some(AuthMethod::GssAPI))
+                .write_to(&mut write_stream)
+                .await
+                .expect("Handshake response with defined method should be written");
+
+            HandshakeResponse::new(None)
+                .write_to(&mut write_stream)
+                .await
+                .expect("Handshake response with NoAcceptableMethod should be written");
+        }
+
+        #[tokio::test]
+        #[rustfmt::skip]
+        async fn rw_relay_messages() {
+            let mut read_stream = tokio_test::io::Builder::new()
+                .read(&[
+                    SOCKS5_VERSION,
+                    command::SOCKS5_CMD_CONNECT,
+                    0x00,
+                    address::SOCKS5_ADDR_TYPE_IPV4,
+                    127, 0, 0, 1, 10, 10,
+                ])
+                .read(&[SOCKS5_VERSION, 0xff, 0x00]) // Incorrect SOCKS5 command
+                .build();
+
+            let request = RelayRequest::read_from(&mut read_stream)
+                .await
+                .expect("Relay request should be parsed");
+
+            assert_eq!(Command::Connect, request.command());
+            assert_eq!(
+                &ipv4_socket_address!(Ipv4Addr::new(127, 0, 0, 1), 2570),
+                request.target_addr(),
+                "Relay request parsed incorrectly"
+            );
+
+            bail_unless_expected_lurk_err!(
+                LurkError::DataError(InvalidValue::SocksCommand(0xff)),
+                RelayRequest::read_from(&mut read_stream).await
+            );
+
+            let mut write_stream = tokio_test::io::Builder::new()
+                .write(&[
+                    SOCKS5_VERSION,
+                    reply::SOCKS5_REPLY_SUCCEEDED,
+                    0x00,
+                    address::SOCKS5_ADDR_TYPE_IPV4,
+                    127, 0, 0, 1, 0, 11,
+                ])
+                .build();
+
+            RelayResponse::new(
+                ipv4_socket_address!(Ipv4Addr::new(127, 0, 0, 1), 11),
+                ReplyStatus::Succeeded,
+            )
+            .write_to(&mut write_stream)
+            .await
+            .expect("Relay response should be written");
+        }
+
+        #[tokio::test]
+        #[rustfmt::skip]
+        async fn rw_address() {
+            let mut moked_stream = tokio_test::io::Builder::new()
+                .read(&[address::SOCKS5_ADDR_TYPE_IPV4, 127, 0, 0, 1, 10, 10]) // correct IPv4
+                .read(&[0xff]) // invalid address type
+                .build();
+
+            let addr = Address::read_from(&mut moked_stream).await.expect("Parsed IPv4 address");
+            assert_eq!(addr, ipv4_socket_address!(Ipv4Addr::new(127, 0, 0, 1), 2570));
+
+            bail_unless_expected_lurk_err!(
+                LurkError::DataError(InvalidValue::AddressType(0xff)),
+                Address::read_from(&mut moked_stream).await
+            );
+    
+            let addr_to_write = ipv4_socket_address!(Ipv4Addr::new(127, 0, 0, 1), 2570);
+            let mut written_address = vec![];
+            addr_to_write.write_to(&mut written_address);
+            assert_eq!(vec![address::SOCKS5_ADDR_TYPE_IPV4, 127, 0, 0, 1, 10, 10], written_address);
+        }
     }
 }
