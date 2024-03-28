@@ -1,23 +1,32 @@
 use anyhow::{anyhow, Result};
 use log::{debug, trace};
 use std::{collections::HashSet, fmt::Display, net::SocketAddr};
-use tokio::{io::copy_bidirectional, net::TcpStream};
-
-use crate::{
-    auth::LurkAuthenticator, error::LurkError, proto::{
-        message::LurkStreamWrapper,
-        socks5::{Address, AuthMethod, HandshakeRequest, HandshakeResponse, RelayRequest, RelayResponse, ReplyStatus},
-    }
+use tokio::{
+    io::{copy_bidirectional, AsyncReadExt, AsyncWriteExt}, net::TcpStream,
 };
 
-pub struct LurkClient {
+use crate::{
+    auth::LurkAuthenticator,
+    error::LurkError,
+    proto::{
+        message::LurkStreamWrapper,
+        socks5::{Address, AuthMethod, HandshakeRequest, HandshakeResponse, RelayRequest, RelayResponse, ReplyStatus},
+    },
+};
+
+pub struct LurkClient<S: AsyncReadExt + AsyncWriteExt + Unpin> {
     addr: SocketAddr,
     auth_enabled: bool,
-    stream: LurkStreamWrapper<TcpStream>,
+    stream: LurkStreamWrapper<S>,
 }
 
-impl LurkClient {
-    pub fn new(stream: TcpStream, addr: SocketAddr, auth_enabled: bool) -> LurkClient {
+pub type LurkTcpClient = LurkClient<TcpStream>;
+
+impl<S> LurkClient<S>
+where
+    S: AsyncReadExt + AsyncWriteExt + Unpin,
+{
+    pub fn new(stream: S, addr: SocketAddr, auth_enabled: bool) -> LurkClient<S> {
         LurkClient {
             stream: LurkStreamWrapper::new(stream),
             addr,
@@ -48,7 +57,7 @@ impl LurkClient {
         self.stream.write_response(response).await
     }
 
-    pub async fn relay_data(&mut self, target_stream: &mut TcpStream) {
+    pub async fn relay_data(&mut self, target_stream: &mut S) {
         debug!("Starting data relaying tunnel for {} ...", self);
         match copy_bidirectional(&mut *self.stream, target_stream).await {
             Ok((l2r, r2l)) => trace!("tunnel closed, L2R {} bytes, R2L {} bytes transmitted", l2r, r2l),
@@ -71,7 +80,10 @@ impl LurkClient {
     }
 }
 
-impl Display for LurkClient {
+impl<S> Display for LurkClient<S>
+where
+    S: AsyncReadExt + AsyncWriteExt + Unpin,
+{
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "client {}", self.addr)
     }

@@ -1,6 +1,6 @@
 use crate::{
     auth::LurkAuthenticator,
-    client::LurkClient,
+    client::LurkTcpClient,
     error::{LurkError, Unsupported},
     proto::socks5::{Address, Command, ReplyStatus},
 };
@@ -46,7 +46,7 @@ impl LurkServer {
 
     fn on_client_connected(&self, stream: TcpStream, addr: SocketAddr) {
         info!("New connection has been established from {}", addr);
-        let mut client = LurkClient::new(stream, addr, self.auth_enabled);
+        let mut client = LurkTcpClient::new(stream, addr, self.auth_enabled);
         let handler = LurkConnectionHandler { server_addr: self.addr };
         tokio::spawn(async move {
             if let Err(err) = handler.handle_client(&mut client).await {
@@ -61,7 +61,7 @@ struct LurkConnectionHandler {
 }
 
 impl LurkConnectionHandler {
-    async fn handle_client(&self, client: &mut LurkClient) -> Result<()> {
+    async fn handle_client(&self, client: &mut LurkTcpClient) -> Result<()> {
         // Complete handshake process and negotiate the authentication method.
         let auth_method = client.handshake().await?;
         debug!("Selected auth method '{:?}' for {}", auth_method, client);
@@ -79,7 +79,7 @@ impl LurkConnectionHandler {
         Ok(())
     }
 
-    async fn handle_relay(&self, client: &mut LurkClient) -> Result<()> {
+    async fn handle_relay(&self, client: &mut LurkTcpClient) -> Result<()> {
         let relay_req = client.read_relay_request().await?;
 
         match relay_req.command() {
@@ -88,7 +88,7 @@ impl LurkConnectionHandler {
         }
     }
 
-    async fn handle_connect_command(&self, client: &mut LurkClient, target: &Address) -> Result<()> {
+    async fn handle_connect_command(&self, client: &mut LurkTcpClient, target: &Address) -> Result<()> {
         debug!("Handling SOCKS5 CONNECT from {}", client);
 
         // Establish TCP connection with the target host.
@@ -114,7 +114,7 @@ impl LurkConnectionHandler {
         Ok(tcp_stream)
     }
 
-    async fn on_handle_relay_error(&self, client: &mut LurkClient, err: anyhow::Error) -> Result<()> {
+    async fn on_handle_relay_error(&self, client: &mut LurkTcpClient, err: anyhow::Error) -> Result<()> {
         let error = err.to_string();
         let status = ReplyStatus::from(err);
         debug!("Error: '{}'. Replied with status '{:?}' to {}", error, status, client);
