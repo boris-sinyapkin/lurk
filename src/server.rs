@@ -117,10 +117,7 @@ impl LurkConnectionHandler {
     async fn on_handle_relay_error(&self, client: &mut LurkClient, err: anyhow::Error) -> Result<()> {
         let error = err.to_string();
         let status = ReplyStatus::from(err);
-        debug!(
-            "Error occured during relay handling from {}. Replied with status '{:?}' (err: '{}')",
-            client, status, error
-        );
+        debug!("Error: '{}'. Replied with status '{:?}' to {}", error, status, client);
         client.respond_to_relay_request(self.server_addr, status).await
     }
 }
