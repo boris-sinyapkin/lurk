@@ -40,3 +40,15 @@ impl LurkAuthenticator {
         common_methods.into_iter().nth(0).copied()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pick_none_auth_method() {
+        let client_methods = HashSet::from([AuthMethod::GssAPI, AuthMethod::Password, AuthMethod::None]);
+        assert_eq!(Some(AuthMethod::None), LurkAuthenticator::new(false).select_auth_method(&client_methods));
+        assert_eq!(None, LurkAuthenticator::new(true).select_auth_method(&client_methods));
+    }
+}
