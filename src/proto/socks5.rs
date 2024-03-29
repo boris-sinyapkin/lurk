@@ -6,7 +6,6 @@
 ///
 use anyhow::{bail, ensure, Result};
 use bytes::{BufMut, BytesMut};
-use log::error;
 use std::{
     collections::HashSet,
     net::{Ipv4Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
@@ -305,7 +304,7 @@ impl LurkRequest for RelayRequest {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 #[allow(dead_code)]
 pub enum ReplyStatus {
     Succeeded,
@@ -420,7 +419,7 @@ mod tests {
 
     mod message {
         use crate::{
-            error::{InvalidValue, LurkError},
+            error::{InvalidValue, LurkError, Unsupported},
             proto::{
                 message::{LurkRequest, LurkResponse},
                 socks5::{
@@ -429,9 +428,9 @@ mod tests {
                 },
             },
         };
+        use anyhow::anyhow;
         use std::{
-            collections::HashSet,
-            net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+            collections::HashSet, io, net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4}
         };
 
         #[tokio::test]
@@ -547,6 +546,24 @@ mod tests {
             let mut written_address = vec![];
             addr_to_write.write_to(&mut written_address);
             assert_eq!(vec![address::SOCKS5_ADDR_TYPE_IPV4, 127, 0, 0, 1, 10, 10], written_address);
+        }
+
+        #[test]
+        #[rustfmt::skip]
+        fn error_to_relay_status_cast() {
+            let dummy_sockaddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+            let dummy_invalid_value_err = InvalidValue::AuthMethod(0xff);
+            let dummy_utf8_err = String::from_utf8(vec![0xF1]).unwrap_err();
+
+            assert_eq!(ReplyStatus::CommandNotSupported,     anyhow!(LurkError::Unsupported(Unsupported::Socks5Command(Command::Bind))).into());
+            assert_eq!(ReplyStatus::AddressTypeNotSupported, anyhow!(LurkError::Unsupported(Unsupported::DomainNameAddress)).into());
+            assert_eq!(ReplyStatus::AddressTypeNotSupported, anyhow!(LurkError::Unsupported(Unsupported::IPv6Address)).into());
+            assert_eq!(ReplyStatus::ConnectionNotAllowed,    anyhow!(LurkError::NoAcceptableAuthMethod(dummy_sockaddr)).into());
+            assert_eq!(ReplyStatus::GeneralFailure,          anyhow!(LurkError::DataError(dummy_invalid_value_err)).into());
+            assert_eq!(ReplyStatus::GeneralFailure,          anyhow!(LurkError::DomainNameDecodingFailed(dummy_utf8_err)).into());
+            assert_eq!(ReplyStatus::ConnectionRefused,       anyhow!(io::Error::from(io::ErrorKind::ConnectionRefused)).into());
+            assert_eq!(ReplyStatus::HostUnreachable,         anyhow!(io::Error::from(io::ErrorKind::ConnectionAborted)).into());
+            assert_eq!(ReplyStatus::GeneralFailure,          anyhow!(io::Error::from(io::ErrorKind::NotFound)).into());
         }
     }
 }
