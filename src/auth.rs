@@ -2,20 +2,41 @@ use crate::{client::LurkClient, proto::socks5::AuthMethod};
 use std::collections::HashSet;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-pub struct LurkAuthenticator {}
+pub struct LurkAuthenticator {
+    available_methods: HashSet<AuthMethod>,
+}
 
 impl LurkAuthenticator {
-    const SUPPORTED_METHODS: [AuthMethod; 1] = [AuthMethod::None];
+    pub fn new(auth_enabled: bool) -> LurkAuthenticator {
+        let available_methods = if !auth_enabled {
+            HashSet::from([AuthMethod::None])
+        } else {
+            HashSet::from([])
+        };
+        LurkAuthenticator { available_methods }
+    }
 
     #[allow(unused_variables)]
-    pub fn authenticate<S: AsyncReadExt + AsyncWriteExt + Unpin>(client: &LurkClient<S>, method: AuthMethod) -> bool {
+    pub fn authenticate<S: AsyncReadExt + AsyncWriteExt + Unpin>(
+        &self,
+        client: &LurkClient<S>,
+        method: AuthMethod,
+    ) -> bool {
+        assert!(self.available_methods.contains(&method));
         match method {
             AuthMethod::None => true,
-            _ => todo!(),
+            _ => todo!("Unsupported authentication method {:?}", method),
         }
     }
 
-    pub fn available_methods() -> HashSet<AuthMethod> {
-        HashSet::from(LurkAuthenticator::SUPPORTED_METHODS)
+    /// Find any common authentication method between available
+    /// auth methods on server and supported methods by client.
+    pub fn select_auth_method(&self, client_methods: &HashSet<AuthMethod>) -> Option<AuthMethod> {
+        let common_methods = self
+            .available_methods
+            .intersection(client_methods)
+            .collect::<HashSet<&AuthMethod>>();
+
+        common_methods.into_iter().nth(0).copied()
     }
 }

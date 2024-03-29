@@ -46,8 +46,11 @@ impl LurkServer {
 
     fn on_client_connected(&self, stream: TcpStream, addr: SocketAddr) {
         info!("New connection has been established from {}", addr);
-        let mut client = LurkTcpClient::new(stream, addr, self.auth_enabled);
-        let handler = LurkConnectionHandler { server_addr: self.addr };
+        let mut client = LurkTcpClient::new(stream, addr);
+        let handler = LurkConnectionHandler {
+            server_addr: self.addr,
+            authenticator: LurkAuthenticator::new(self.auth_enabled),
+        };
         tokio::spawn(async move {
             if let Err(err) = handler.handle_client(&mut client).await {
                 error!("Error occured during handling of client {}, {}", addr, err);
@@ -58,16 +61,17 @@ impl LurkServer {
 
 struct LurkConnectionHandler {
     server_addr: SocketAddr,
+    authenticator: LurkAuthenticator,
 }
 
 impl LurkConnectionHandler {
     async fn handle_client(&self, client: &mut LurkTcpClient) -> Result<()> {
         // Complete handshake process and negotiate the authentication method.
-        let auth_method = client.handshake().await?;
+        let auth_method = client.handshake(&self.authenticator).await?;
         debug!("Selected auth method '{:?}' for {}", auth_method, client);
 
         // Authenticate client with selected method.
-        LurkAuthenticator::authenticate(client, auth_method);
+        self.authenticator.authenticate(client, auth_method);
 
         // Proceed with SOCKS5 relay handling.
         // This will receive and process relay request, handle SOCKS5 command
