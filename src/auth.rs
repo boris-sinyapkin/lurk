@@ -1,6 +1,11 @@
-use crate::{client::LurkClient, proto::socks5::AuthMethod};
+use crate::{
+    client::LurkClient,
+    proto::{
+        message::{LurkRequestReader, LurkResponseWriter},
+        socks5::AuthMethod,
+    },
+};
 use std::collections::HashSet;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub struct LurkAuthenticator {
     available_methods: HashSet<AuthMethod>,
@@ -17,7 +22,7 @@ impl LurkAuthenticator {
     }
 
     #[allow(unused_variables)]
-    pub fn authenticate<S: AsyncReadExt + AsyncWriteExt + Unpin>(
+    pub fn authenticate<S: LurkRequestReader + LurkResponseWriter + Unpin>(
         &self,
         client: &LurkClient<S>,
         method: AuthMethod,
@@ -48,7 +53,10 @@ mod tests {
     #[test]
     fn pick_none_auth_method() {
         let client_methods = HashSet::from([AuthMethod::GssAPI, AuthMethod::Password, AuthMethod::None]);
-        assert_eq!(Some(AuthMethod::None), LurkAuthenticator::new(false).select_auth_method(&client_methods));
+        assert_eq!(
+            Some(AuthMethod::None),
+            LurkAuthenticator::new(false).select_auth_method(&client_methods)
+        );
         assert_eq!(None, LurkAuthenticator::new(true).select_auth_method(&client_methods));
     }
 }

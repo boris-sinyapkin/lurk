@@ -17,6 +17,18 @@ pub trait LurkResponse {
     async fn write_to<T: AsyncWriteExt + Unpin>(&self, stream: &mut T) -> Result<()>;
 }
 
+pub trait LurkResponseWriter {
+    async fn write_response<Response>(&mut self, response: Response) -> Result<()>
+    where
+        Response: LurkResponse + Debug;
+}
+
+pub trait LurkRequestReader {
+    async fn read_request<Request: LurkRequest + Debug>(&mut self) -> Result<Request>
+    where
+        Request: LurkRequest + Debug;
+}
+
 pub struct LurkStreamWrapper<Stream>
 where
     Stream: AsyncReadExt + AsyncWriteExt + Unpin,
@@ -31,8 +43,13 @@ where
     pub fn new(stream: Stream) -> LurkStreamWrapper<Stream> {
         LurkStreamWrapper { stream }
     }
+}
 
-    pub async fn read_request<Request>(&mut self) -> Result<Request>
+impl<Stream> LurkRequestReader for LurkStreamWrapper<Stream>
+where
+    Stream: AsyncReadExt + AsyncWriteExt + Unpin,
+{
+    async fn read_request<Request>(&mut self) -> Result<Request>
     where
         Request: LurkRequest + Debug,
     {
@@ -41,8 +58,13 @@ where
 
         Ok(request)
     }
+}
 
-    pub async fn write_response<Response>(&mut self, response: Response) -> Result<()>
+impl<Stream> LurkResponseWriter for LurkStreamWrapper<Stream>
+where
+    Stream: AsyncReadExt + AsyncWriteExt + Unpin,
+{
+    async fn write_response<Response>(&mut self, response: Response) -> Result<()>
     where
         Response: LurkResponse + Debug,
     {

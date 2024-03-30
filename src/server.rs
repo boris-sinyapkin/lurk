@@ -2,7 +2,10 @@ use crate::{
     auth::LurkAuthenticator,
     client::LurkTcpClient,
     error::{LurkError, Unsupported},
-    proto::socks5::{Address, Command, ReplyStatus},
+    proto::{
+        message::LurkStreamWrapper,
+        socks5::{Address, Command, ReplyStatus},
+    },
 };
 use anyhow::{bail, Result};
 use log::{debug, error, info, warn};
@@ -46,7 +49,7 @@ impl LurkServer {
 
     fn on_client_connected(&self, stream: TcpStream, addr: SocketAddr) {
         info!("New connection has been established from {}", addr);
-        let mut client = LurkTcpClient::new(stream, addr);
+        let mut client = LurkTcpClient::new(LurkStreamWrapper::new(stream), addr);
         let handler = LurkConnectionHandler {
             server_addr: self.addr,
             authenticator: LurkAuthenticator::new(self.auth_enabled),

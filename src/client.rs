@@ -1,8 +1,12 @@
 use anyhow::{anyhow, Result};
 use log::{debug, trace};
-use std::{fmt::Display, net::SocketAddr};
+use std::{
+    fmt::Display,
+    net::SocketAddr,
+    ops::{Deref, DerefMut},
+};
 use tokio::{
-    io::{copy_bidirectional, AsyncReadExt, AsyncWriteExt},
+    io::{copy_bidirectional, AsyncRead, AsyncWrite},
     net::TcpStream,
 };
 
@@ -10,27 +14,27 @@ use crate::{
     auth::LurkAuthenticator,
     error::LurkError,
     proto::{
-        message::LurkStreamWrapper,
+        message::{LurkRequestReader, LurkResponseWriter, LurkStreamWrapper},
         socks5::{Address, AuthMethod, HandshakeRequest, HandshakeResponse, RelayRequest, RelayResponse, ReplyStatus},
     },
 };
 
-pub struct LurkClient<S: AsyncReadExt + AsyncWriteExt + Unpin> {
+pub struct LurkClient<S>
+where
+    S: LurkRequestReader + LurkResponseWriter + Unpin,
+{
     addr: SocketAddr,
-    stream: LurkStreamWrapper<S>,
+    stream: S,
 }
 
-pub type LurkTcpClient = LurkClient<TcpStream>;
+pub type LurkTcpClient = LurkClient<LurkStreamWrapper<TcpStream>>;
 
 impl<S> LurkClient<S>
 where
-    S: AsyncReadExt + AsyncWriteExt + Unpin,
+    S: LurkRequestReader + LurkResponseWriter + Unpin + Deref + DerefMut,
 {
     pub fn new(stream: S, addr: SocketAddr) -> LurkClient<S> {
-        LurkClient {
-            stream: LurkStreamWrapper::new(stream),
-            addr,
-        }
+        LurkClient { stream, addr }
     }
 
     /// Handshaking with client.
@@ -57,7 +61,11 @@ where
         self.stream.write_response(response).await
     }
 
-    pub async fn relay_data(&mut self, target_stream: &mut S) {
+    pub async fn relay_data<T>(&mut self, target_stream: &mut T)
+    where
+        T: AsyncRead + AsyncWrite + Unpin,
+        <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
+    {
         debug!("Starting data relaying tunnel for {} ...", self);
         match copy_bidirectional(&mut *self.stream, target_stream).await {
             Ok((l2r, r2l)) => trace!("tunnel closed, L2R {} bytes, R2L {} bytes transmitted", l2r, r2l),
@@ -68,9 +76,29 @@ where
 
 impl<S> Display for LurkClient<S>
 where
-    S: AsyncReadExt + AsyncWriteExt + Unpin,
+    S: LurkRequestReader + LurkResponseWriter + Unpin,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "client {}", self.addr)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn pick_none_auth_method() {
+        /*
+         * let stream = MockStream::new();
+         * let client = MockClient::new();
+         * let authenticator = MockAuthenticator::new()
+         *
+         * stream.expect
+         *
+         *
+         * client.handshake(authenticator).await?
+         *
+         */
     }
 }
