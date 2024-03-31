@@ -6,6 +6,7 @@
 ///
 use anyhow::{bail, ensure, Result};
 use bytes::{BufMut, BytesMut};
+use cfg_if::cfg_if;
 use std::{
     collections::HashSet,
     net::{Ipv4Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
@@ -237,7 +238,7 @@ impl LurkRequest for HandshakeRequest {
 // | 1  |   1    |
 // +----+--------+
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct HandshakeResponse {
     selected_method: Option<AuthMethod>,
 }
@@ -396,6 +397,16 @@ impl LurkResponse for RelayResponse {
     }
 }
 
+cfg_if! {
+    if #[cfg(test)] {
+        impl HandshakeRequest {
+            pub fn new(auth_methods: HashSet<AuthMethod>) -> HandshakeRequest {
+                HandshakeRequest { auth_methods }
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -430,7 +441,9 @@ mod tests {
         };
         use anyhow::anyhow;
         use std::{
-            collections::HashSet, io, net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4}
+            collections::HashSet,
+            io,
+            net::{IpAddr, Ipv4Addr, SocketAddr, SocketAddrV4},
         };
 
         #[tokio::test]

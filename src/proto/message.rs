@@ -5,7 +5,10 @@ use std::{
 
 use anyhow::Result;
 use log::trace;
+use mockall::mock;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+/// Traits
 
 pub trait LurkRequest {
     async fn read_from<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Self>
@@ -20,14 +23,16 @@ pub trait LurkResponse {
 pub trait LurkResponseWriter {
     async fn write_response<Response>(&mut self, response: Response) -> Result<()>
     where
-        Response: LurkResponse + Debug;
+        Response: LurkResponse + Debug + 'static;
 }
 
 pub trait LurkRequestReader {
-    async fn read_request<Request: LurkRequest + Debug>(&mut self) -> Result<Request>
+    async fn read_request<Request>(&mut self) -> Result<Request>
     where
-        Request: LurkRequest + Debug;
+        Request: LurkRequest + Debug + 'static;
 }
+
+/// Stream implementation
 
 pub struct LurkStreamWrapper<Stream>
 where
@@ -91,5 +96,26 @@ where
 {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.stream
+    }
+}
+
+mock! {
+    pub LurkStreamWrapper<Stream: AsyncReadExt + AsyncWriteExt + Unpin + 'static> {}
+
+    impl<Stream: AsyncReadExt + AsyncWriteExt + Unpin> LurkRequestReader for LurkStreamWrapper<Stream> {
+        async fn read_request<Request: LurkRequest + Debug + 'static>(&mut self) -> Result<Request>;
+    }
+
+    impl<Stream: AsyncReadExt + AsyncWriteExt + Unpin> LurkResponseWriter for LurkStreamWrapper<Stream> {
+        async fn write_response<Response: LurkResponse + Debug + 'static>(&mut self, response: Response) -> Result<()>;
+    }
+
+    impl<Stream: AsyncReadExt + AsyncWriteExt + Unpin> Deref for LurkStreamWrapper<Stream> {
+        type Target = Stream;
+        fn deref(&self) -> &<MockLurkStreamWrapper<Stream> as Deref>::Target;
+    }
+
+    impl<Stream: AsyncReadExt + AsyncWriteExt + Unpin> DerefMut for LurkStreamWrapper<Stream> {
+        fn deref_mut(&mut self) -> &mut Stream;
     }
 }

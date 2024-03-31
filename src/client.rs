@@ -31,7 +31,7 @@ pub type LurkTcpClient = LurkClient<LurkStreamWrapper<TcpStream>>;
 
 impl<S> LurkClient<S>
 where
-    S: LurkRequestReader + LurkResponseWriter + Unpin + Deref + DerefMut,
+    S: LurkRequestReader + LurkResponseWriter + Unpin + DerefMut,
 {
     pub fn new(stream: S, addr: SocketAddr) -> LurkClient<S> {
         LurkClient { stream, addr }
@@ -86,19 +86,36 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::proto::message::MockLurkStreamWrapper;
+    use mockall::predicate;
+    use std::{
+        collections::HashSet,
+        net::{IpAddr, Ipv4Addr},
+    };
+    use tokio_test::io::Mock;
 
-    #[test]
-    fn pick_none_auth_method() {
-        /*
-         * let stream = MockStream::new();
-         * let client = MockClient::new();
-         * let authenticator = MockAuthenticator::new()
-         *
-         * stream.expect
-         *
-         *
-         * client.handshake(authenticator).await?
-         *
-         */
+    #[tokio::test]
+    async fn socks5_handshake() {
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+        let mut stream = MockLurkStreamWrapper::<Mock>::new();
+
+        let client_methods = [AuthMethod::None, AuthMethod::GssAPI];
+        let agreed_method = AuthMethod::None;
+
+        stream
+            .expect_read_request()
+            .once()
+            .returning(move || Ok(HandshakeRequest::new(HashSet::from(client_methods))));
+
+        stream
+            .expect_write_response()
+            .once()
+            .with(predicate::eq(HandshakeResponse::new(Some(agreed_method))))
+            .returning(|_| Ok(()));
+
+        let mut client = LurkClient::new(stream, addr);
+        let authenticator = LurkAuthenticator::new(false);
+
+        assert_eq!(agreed_method, client.handshake(&authenticator).await.unwrap());
     }
 }
