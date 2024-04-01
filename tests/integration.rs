@@ -1,18 +1,14 @@
 use httptest::{matchers, responders, Expectation, ServerBuilder};
-use log::LevelFilter;
-use log4rs_test_utils::test_logging::init_logging_once_for;
 use lurk::server::LurkServer;
 use pretty_assertions::assert_eq;
 use reqwest::{ClientBuilder, Proxy};
 use std::net::SocketAddr;
 
+mod common;
+
 #[tokio::test]
 async fn http_tunnel() {
-    init_logging_once_for(
-        vec!["lurk"],
-        LevelFilter::Debug,
-        "{h({({l}):5.5})} [{M}] {f}:{L}: {m}{n}",
-    );
+    common::init_logging();
 
     let lurk_server_addr = "127.0.0.1:32001".parse::<SocketAddr>().unwrap();
     let http_server_addr = "127.0.0.1:32002".parse::<SocketAddr>().unwrap();
