@@ -5,8 +5,10 @@ use std::{
 
 use anyhow::Result;
 use log::trace;
-use mockall::mock;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+#[cfg(test)]
+use mockall::mock;
 
 /// Traits
 
@@ -99,6 +101,7 @@ where
     }
 }
 
+#[cfg(test)]
 mock! {
     pub LurkStreamWrapper<Stream: AsyncReadExt + AsyncWriteExt + Unpin + 'static> {}
 
