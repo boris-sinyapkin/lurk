@@ -1,16 +1,11 @@
 use anyhow::Result;
 use clap::Parser;
-use config::LurkConfig;
 use log4rs::config::Deserializers;
-use server::LurkServer;
+use lurk::{
+    config::{self, LurkConfig},
+    server::LurkServer,
+};
 use std::net::{IpAddr, SocketAddr};
-
-mod auth;
-mod client;
-mod config;
-mod error;
-mod proto;
-mod server;
 
 #[tokio::main]
 async fn main() -> Result<()> {
