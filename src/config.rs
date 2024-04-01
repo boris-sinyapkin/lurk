@@ -20,7 +20,7 @@ pub struct LurkConfig {
 
     /// Disable authentication of clients
     #[clap(long, default_value_t = true)]
-    no_auth: bool
+    no_auth: bool,
 }
 
 impl LurkConfig {

@@ -1,8 +1,6 @@
-use std::net::SocketAddr;
-
-use thiserror::Error;
-
 use crate::proto::socks5::Command;
+use std::net::SocketAddr;
+use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum LurkError {

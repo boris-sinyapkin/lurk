@@ -1,7 +1,7 @@
-use lurk::server::LurkServer;
 use httptest::{matchers, responders, Expectation, ServerBuilder};
 use log::LevelFilter;
 use log4rs_test_utils::test_logging::init_logging_once_for;
+use lurk::server::LurkServer;
 use pretty_assertions::assert_eq;
 use reqwest::{ClientBuilder, Proxy};
 use std::net::SocketAddr;
