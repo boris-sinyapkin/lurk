@@ -12,6 +12,8 @@ pub enum LurkError {
     Unsupported(Unsupported),
     #[error("unable to agree on authentication method with client {0:?}")]
     NoAcceptableAuthMethod(SocketAddr),
+    #[error("unable to resolve domain name {0}")]
+    UnresolvedDomainName(String)
 }
 
 #[derive(Error, Debug, PartialEq)]
@@ -34,6 +36,4 @@ pub enum Unsupported {
     Socks5Command(Command),
     #[error("IPv6 network address")]
     IPv6Address,
-    #[error("Domain network address")]
-    DomainNameAddress,
 }

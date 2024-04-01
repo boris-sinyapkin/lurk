@@ -10,7 +10,7 @@ use crate::{
 use anyhow::{bail, Result};
 use log::{debug, error, info, warn};
 use std::net::SocketAddr;
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::{lookup_host, TcpListener, TcpStream};
 
 pub struct LurkServer {
     addr: SocketAddr,
@@ -115,12 +115,20 @@ impl LurkConnectionHandler {
     }
 
     async fn establish_tcp_connection(target: &Address) -> Result<TcpStream> {
-        let tcp_stream = match target {
-            Address::SocketAddress(sock_addr) => TcpStream::connect(sock_addr).await?,
-            Address::DomainName(_, _) => bail!(LurkError::Unsupported(Unsupported::DomainNameAddress)),
+        let addr = match target {
+            Address::SocketAddress(sock_addr) => *sock_addr,
+            Address::DomainName(hostname, port) => {
+                // Resolve by means of builtin tokio DNS resolver
+                let resolved_names = lookup_host(format!("{hostname:}:{port:}")).await?;
+                // Take first found
+                resolved_names
+                    .into_iter()
+                    .nth(0)
+                    .ok_or(LurkError::UnresolvedDomainName(hostname.to_string()))?
+            }
         };
 
-        Ok(tcp_stream)
+        TcpStream::connect(addr).await.map_err(anyhow::Error::from)
     }
 
     async fn on_handle_relay_error(&self, client: &mut LurkTcpClient, err: anyhow::Error) -> Result<()> {

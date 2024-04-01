@@ -353,9 +353,10 @@ impl From<LurkError> for ReplyStatus {
         match err {
             LurkError::Unsupported(unsupported) => match unsupported {
                 Unsupported::Socks5Command(_) => ReplyStatus::CommandNotSupported,
-                Unsupported::IPv6Address | Unsupported::DomainNameAddress => ReplyStatus::AddressTypeNotSupported,
+                Unsupported::IPv6Address => ReplyStatus::AddressTypeNotSupported,
             },
             LurkError::NoAcceptableAuthMethod(_) => ReplyStatus::ConnectionNotAllowed,
+            LurkError::UnresolvedDomainName(_) => ReplyStatus::HostUnreachable,
             _ => ReplyStatus::GeneralFailure,
         }
     }
@@ -579,7 +580,6 @@ mod tests {
             let dummy_utf8_err = String::from_utf8(vec![0xF1]).unwrap_err();
 
             assert_eq!(ReplyStatus::CommandNotSupported,     anyhow!(LurkError::Unsupported(Unsupported::Socks5Command(Command::Bind))).into());
-            assert_eq!(ReplyStatus::AddressTypeNotSupported, anyhow!(LurkError::Unsupported(Unsupported::DomainNameAddress)).into());
             assert_eq!(ReplyStatus::AddressTypeNotSupported, anyhow!(LurkError::Unsupported(Unsupported::IPv6Address)).into());
             assert_eq!(ReplyStatus::ConnectionNotAllowed,    anyhow!(LurkError::NoAcceptableAuthMethod(dummy_sockaddr)).into());
             assert_eq!(ReplyStatus::GeneralFailure,          anyhow!(LurkError::DataError(dummy_invalid_value_err)).into());
