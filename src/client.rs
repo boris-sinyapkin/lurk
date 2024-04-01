@@ -1,5 +1,5 @@
-use anyhow::{anyhow, Result};
-use log::{debug, trace};
+use anyhow::{anyhow, bail, Result};
+use log::{debug, error};
 use std::{
     fmt::Display,
     net::SocketAddr,
@@ -61,16 +61,19 @@ where
         self.stream.write_response(response).await
     }
 
-    pub async fn relay_data<T>(&mut self, target_stream: &mut T)
+    pub async fn relay_data<T>(&mut self, target_stream: &mut T) -> Result<()>
     where
         T: AsyncRead + AsyncWrite + Unpin,
         <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
     {
-        debug!("Starting data relaying tunnel for {} ...", self);
         match copy_bidirectional(&mut *self.stream, target_stream).await {
-            Ok((l2r, r2l)) => trace!("tunnel closed, L2R {} bytes, R2L {} bytes transmitted", l2r, r2l),
-            Err(err) => trace!("tunnel closed with error: {}", err),
+            Ok((l2r, r2l)) => debug!("Tunnel closed, L2R {} bytes, R2L {} bytes transmitted", l2r, r2l),
+            Err(err) => {
+                error!("Tunnel closed with error: {}", err);
+                bail!(err)
+            }
         }
+        Ok(())
     }
 }
 
@@ -79,7 +82,7 @@ where
     S: LurkRequestReader + LurkResponseWriter + Unpin,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "client {}", self.addr)
+        write!(f, "{}", self.addr)
     }
 }
 

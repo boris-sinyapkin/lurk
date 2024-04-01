@@ -55,6 +55,8 @@ impl LurkServer {
             if let Err(err) = handler.handle_client(&mut client).await {
                 error!("Error occured during handling of client {}, {}", addr, err);
             }
+
+            info!("Connection with {} has been finished", client);
         });
     }
 }
@@ -98,13 +100,16 @@ impl LurkConnectionHandler {
         // Establish TCP connection with the target host.
         let mut target_stream = LurkConnectionHandler::establish_tcp_connection(target).await?;
 
-        debug!("TCP connection has been established with the target {:?}", target);
+        debug!("TCP connection has been established with the target {}", target);
         client
             .respond_to_relay_request(self.server_addr, ReplyStatus::Succeeded)
             .await?;
 
-        // Start data relaying.
-        client.relay_data(&mut target_stream).await;
+        debug!(
+            "Starting data relaying tunnel: client [{}] <---> lurk [{}] <---> destination [{}]",
+            client, self.server_addr, target
+        );
+        client.relay_data(&mut target_stream).await?;
 
         Ok(())
     }

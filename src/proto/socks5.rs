@@ -9,6 +9,7 @@ use bytes::{BufMut, BytesMut};
 use cfg_if::cfg_if;
 use std::{
     collections::HashSet,
+    fmt::Display,
     net::{Ipv4Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -173,6 +174,15 @@ impl Address {
         let port = stream.read_u16().await?;
 
         Ok(Address::DomainName(name, port))
+    }
+}
+
+impl Display for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Address::SocketAddress(sock) => write!(f, "{sock:}"),
+            Address::DomainName(name, port) => write!(f, "{name:}:{port:}"),
+        }
     }
 }
 
