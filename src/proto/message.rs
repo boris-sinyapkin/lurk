@@ -22,13 +22,13 @@ pub trait LurkResponse {
     async fn write_to<T: AsyncWriteExt + Unpin>(&self, stream: &mut T) -> Result<()>;
 }
 
-pub trait LurkResponseWriter {
+pub trait LurkResponseWrite {
     async fn write_response<Response>(&mut self, response: Response) -> Result<()>
     where
         Response: LurkResponse + Debug + 'static;
 }
 
-pub trait LurkRequestReader {
+pub trait LurkRequestRead {
     async fn read_request<Request>(&mut self) -> Result<Request>
     where
         Request: LurkRequest + Debug + 'static;
@@ -52,7 +52,7 @@ where
     }
 }
 
-impl<Stream> LurkRequestReader for LurkStreamWrapper<Stream>
+impl<Stream> LurkRequestRead for LurkStreamWrapper<Stream>
 where
     Stream: AsyncReadExt + AsyncWriteExt + Unpin,
 {
@@ -67,7 +67,7 @@ where
     }
 }
 
-impl<Stream> LurkResponseWriter for LurkStreamWrapper<Stream>
+impl<Stream> LurkResponseWrite for LurkStreamWrapper<Stream>
 where
     Stream: AsyncReadExt + AsyncWriteExt + Unpin,
 {
@@ -105,11 +105,11 @@ where
 mock! {
     pub LurkStreamWrapper<Stream: AsyncReadExt + AsyncWriteExt + Unpin + 'static> {}
 
-    impl<Stream: AsyncReadExt + AsyncWriteExt + Unpin> LurkRequestReader for LurkStreamWrapper<Stream> {
+    impl<Stream: AsyncReadExt + AsyncWriteExt + Unpin> LurkRequestRead for LurkStreamWrapper<Stream> {
         async fn read_request<Request: LurkRequest + Debug + 'static>(&mut self) -> Result<Request>;
     }
 
-    impl<Stream: AsyncReadExt + AsyncWriteExt + Unpin> LurkResponseWriter for LurkStreamWrapper<Stream> {
+    impl<Stream: AsyncReadExt + AsyncWriteExt + Unpin> LurkResponseWrite for LurkStreamWrapper<Stream> {
         async fn write_response<Response: LurkResponse + Debug + 'static>(&mut self, response: Response) -> Result<()>;
     }
 

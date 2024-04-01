@@ -14,14 +14,14 @@ use crate::{
     auth::LurkAuthenticator,
     error::LurkError,
     proto::{
-        message::{LurkRequestReader, LurkResponseWriter, LurkStreamWrapper},
+        message::{LurkRequestRead, LurkResponseWrite, LurkStreamWrapper},
         socks5::{Address, AuthMethod, HandshakeRequest, HandshakeResponse, RelayRequest, RelayResponse, ReplyStatus},
     },
 };
 
 pub struct LurkClient<S>
 where
-    S: LurkRequestReader + LurkResponseWriter + Unpin,
+    S: LurkRequestRead + LurkResponseWrite + Unpin,
 {
     addr: SocketAddr,
     stream: S,
@@ -31,7 +31,7 @@ pub type LurkTcpClient = LurkClient<LurkStreamWrapper<TcpStream>>;
 
 impl<S> LurkClient<S>
 where
-    S: LurkRequestReader + LurkResponseWriter + Unpin + DerefMut,
+    S: LurkRequestRead + LurkResponseWrite + Unpin + DerefMut,
 {
     pub fn new(stream: S, addr: SocketAddr) -> LurkClient<S> {
         LurkClient { stream, addr }
@@ -79,7 +79,7 @@ where
 
 impl<S> Display for LurkClient<S>
 where
-    S: LurkRequestReader + LurkResponseWriter + Unpin,
+    S: LurkRequestRead + LurkResponseWrite + Unpin,
 {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.addr)

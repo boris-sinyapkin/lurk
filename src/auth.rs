@@ -1,7 +1,7 @@
 use crate::{
     client::LurkClient,
     proto::{
-        message::{LurkRequestReader, LurkResponseWriter},
+        message::{LurkRequestRead, LurkResponseWrite},
         socks5::AuthMethod,
     },
 };
@@ -22,7 +22,7 @@ impl LurkAuthenticator {
     }
 
     #[allow(unused_variables)]
-    pub fn authenticate<S: LurkRequestReader + LurkResponseWriter + Unpin>(
+    pub fn authenticate<S: LurkRequestRead + LurkResponseWrite + Unpin>(
         &self,
         client: &LurkClient<S>,
         method: AuthMethod,
