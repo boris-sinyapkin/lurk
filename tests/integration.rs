@@ -2,7 +2,7 @@ use httptest::{matchers, responders, Expectation, ServerBuilder};
 use lurk::server::LurkServer;
 use pretty_assertions::assert_eq;
 use reqwest::{ClientBuilder, Proxy};
-use std::net::SocketAddr;
+use std::{net::SocketAddr, thread::sleep, time::Duration};
 
 mod common;
 
@@ -14,7 +14,7 @@ async fn http_tunnel() {
     let http_server_addr = "127.0.0.1:32002".parse::<SocketAddr>().unwrap();
 
     // Run proxy
-    tokio::spawn(async move {
+    let proxy_future = tokio::spawn(async move {
         LurkServer::new(lurk_server_addr, false)
             .run()
             .await
@@ -51,4 +51,7 @@ async fn http_tunnel() {
         .expect("Unable to send GET request to HTTP server through proxy");
 
     assert_eq!(200, response.status());
+
+    proxy_future.abort();
+    sleep(Duration::from_millis(1000));
 }
