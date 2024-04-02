@@ -2,10 +2,8 @@ use crate::{
     auth::LurkAuthenticator,
     client::LurkTcpClient,
     error::{LurkError, Unsupported},
-    proto::{
-        message::LurkStreamWrapper,
-        socks5::{Address, Command, ReplyStatus},
-    },
+    io::stream::LurkStreamWrapper,
+    proto::socks5::{Address, Command, ReplyStatus},
 };
 use anyhow::{bail, Result};
 use log::{debug, error, info, warn};

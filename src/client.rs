@@ -1,3 +1,13 @@
+use crate::{
+    auth::LurkAuthenticator,
+    error::LurkError,
+    io::{stream::LurkStreamWrapper, LurkRequestRead, LurkResponseWrite},
+    proto::socks5::{
+        request::{HandshakeRequest, RelayRequest},
+        response::{HandshakeResponse, RelayResponse},
+        Address, AuthMethod, ReplyStatus,
+    },
+};
 use anyhow::{anyhow, bail, Result};
 use log::{debug, error};
 use std::{
@@ -8,15 +18,6 @@ use std::{
 use tokio::{
     io::{copy_bidirectional, AsyncRead, AsyncWrite},
     net::TcpStream,
-};
-
-use crate::{
-    auth::LurkAuthenticator,
-    error::LurkError,
-    proto::{
-        message::{LurkRequestRead, LurkResponseWrite, LurkStreamWrapper},
-        socks5::{Address, AuthMethod, HandshakeRequest, HandshakeResponse, RelayRequest, RelayResponse, ReplyStatus},
-    },
 };
 
 pub struct LurkClient<S>
@@ -89,7 +90,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::proto::message::MockLurkStreamWrapper;
+    use crate::io::stream::MockLurkStreamWrapper;
     use mockall::predicate;
     use std::{
         collections::HashSet,

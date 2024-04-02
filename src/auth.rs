@@ -1,9 +1,7 @@
 use crate::{
     client::LurkClient,
-    proto::{
-        message::{LurkRequestRead, LurkResponseWrite},
-        socks5::AuthMethod,
-    },
+    io::{LurkRequestRead, LurkResponseWrite},
+    proto::socks5::AuthMethod,
 };
 use std::collections::HashSet;
 
