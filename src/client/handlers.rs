@@ -31,9 +31,15 @@ impl LurkRequestHandler {
     where
         S: LurkRequestRead + LurkResponseWrite + Unpin,
     {
+        // Pick authentication method.
         authenticator.select_auth_method(request.auth_methods());
-        let response = HandshakeResponse::new(authenticator.current_method());
-        client.stream.write_response(response).await
+        // Prepare response.
+        let mut response_builder = HandshakeResponse::builder();
+        if let Some(method) = authenticator.current_method() {
+            response_builder.with_auth_method(method);
+        }
+        // Communicate selected authentication method to client.
+        client.stream.write_response(response_builder.build()).await
     }
 
     pub async fn handle_socks5_relay_request<'a, S>(

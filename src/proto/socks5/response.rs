@@ -1,7 +1,8 @@
 use super::{consts, Address, AuthMethod, ReplyStatus};
 use crate::io::LurkResponse;
-use anyhow::Result;
+use anyhow::{bail, Result};
 use bytes::{BufMut, BytesMut};
+use log::error;
 use std::net::SocketAddr;
 use tokio::io::AsyncWriteExt;
 
@@ -15,23 +16,51 @@ use tokio::io::AsyncWriteExt;
 
 #[derive(Debug, PartialEq)]
 pub struct HandshakeResponse {
-    selected_method: Option<AuthMethod>,
+    method: u8,
 }
 
 impl HandshakeResponse {
-    pub fn new(selected_method: Option<AuthMethod>) -> HandshakeResponse {
-        HandshakeResponse { selected_method }
+    pub fn builder() -> HandshakeResponseBuilder {
+        HandshakeResponseBuilder { method: None }
     }
 }
 
 impl LurkResponse for HandshakeResponse {
     async fn write_to<T: AsyncWriteExt + Unpin>(&self, stream: &mut T) -> Result<()> {
-        let method = self
-            .selected_method
-            .map_or_else(|| consts::auth::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE, |m| m as u8);
-        let response: [u8; 2] = [consts::SOCKS5_VERSION, method];
+        use consts::auth::*;
+        // Just checking that method value is benign.
+        if self.method != SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE {
+            if let Err(err) = AuthMethod::try_from(self.method) {
+                error!("Unable to convert authentication method to any of SOCKS5 constants");
+                debug_assert!(false);
+                bail!(err)
+            }
+        }
+        let response: [u8; 2] = [consts::SOCKS5_VERSION, self.method];
         stream.write_all(&response).await?;
         Ok(())
+    }
+}
+
+pub struct HandshakeResponseBuilder {
+    method: Option<AuthMethod>,
+}
+
+impl HandshakeResponseBuilder {
+    pub fn with_auth_method(&mut self, selected_method: AuthMethod) -> &mut HandshakeResponseBuilder {
+        debug_assert!(self.method.is_none(), "should be unset");
+        self.method = Some(selected_method);
+        self
+    }
+
+    pub fn build(&self) -> HandshakeResponse {
+        use consts::auth::*;
+        let method = if let Some(m) = self.method {
+            m as u8
+        } else {
+            SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE
+        };
+        HandshakeResponse { method }
     }
 }
 
@@ -74,16 +103,19 @@ pub struct RelayResponseBuilder {
 
 impl RelayResponseBuilder {
     pub fn with_success(&mut self) -> &mut RelayResponseBuilder {
+        debug_assert!(self.status.is_none(), "should be unset");
         self.status = Some(ReplyStatus::Succeeded);
         self
     }
 
     pub fn with_err(&mut self, err: anyhow::Error) -> &mut RelayResponseBuilder {
+        debug_assert!(self.status.is_none(), "should be unset");
         self.status = Some(ReplyStatus::from(err));
         self
     }
 
     pub fn with_bound_address(&mut self, bound_addr: SocketAddr) -> &mut RelayResponseBuilder {
+        debug_assert!(self.bound_addr.is_none(), "should be unset");
         self.bound_addr = Some(Address::SocketAddress(bound_addr));
         self
     }

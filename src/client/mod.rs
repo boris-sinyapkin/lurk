@@ -103,7 +103,7 @@ mod tests {
         stream
             .expect_write_response()
             .once()
-            .with(predicate::eq(HandshakeResponse::new(Some(agreed_method))))
+            .with(predicate::eq(HandshakeResponse::builder().with_auth_method(agreed_method).build()))
             .returning(|_| Ok(()));
 
         let mut client = LurkClient::new(stream, addr);

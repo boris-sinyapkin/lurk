@@ -64,12 +64,15 @@ async fn rw_handshake_messages() {
         .write(&[SOCKS5_VERSION, auth::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE])
         .build();
 
-    HandshakeResponse::new(Some(AuthMethod::GssAPI))
+    HandshakeResponse::builder()
+        .with_auth_method(AuthMethod::GssAPI)
+        .build()
         .write_to(&mut write_stream)
         .await
         .expect("Handshake response with defined method should be written");
 
-    HandshakeResponse::new(None)
+    HandshakeResponse::builder()
+        .build()
         .write_to(&mut write_stream)
         .await
         .expect("Handshake response with NoAcceptableMethod should be written");
