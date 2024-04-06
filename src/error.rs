@@ -1,5 +1,4 @@
 use crate::proto::socks5::Command;
-use std::net::SocketAddr;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -10,8 +9,6 @@ pub enum LurkError {
     DomainNameDecodingFailed(std::string::FromUtf8Error),
     #[error("{0} is not supported")]
     Unsupported(Unsupported),
-    #[error("unable to agree on authentication method with client {0:?}")]
-    NoAcceptableAuthMethod(SocketAddr),
     #[error("unable to resolve domain name {0}")]
     UnresolvedDomainName(String)
 }

@@ -5,13 +5,14 @@
 /// https://datatracker.ietf.org/doc/html/rfc1928#ref-1
 ///
 use crate::error::{InvalidValue, LurkError, Unsupported};
+use anyhow::anyhow;
 use anyhow::{bail, Result};
 use bytes::BufMut;
 use std::{
     fmt::Display,
     net::{Ipv4Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
 };
-use tokio::io::AsyncReadExt;
+use tokio::{io::AsyncReadExt, net::lookup_host};
 
 pub mod request;
 pub mod response;
@@ -118,6 +119,21 @@ pub enum Address {
 }
 
 impl Address {
+    pub async fn to_socket_addr(&self) -> Result<SocketAddr> {
+        match self {
+            Address::SocketAddress(sock_addr) => Ok(*sock_addr),
+            Address::DomainName(hostname, port) => {
+                // Resolve by means of builtin tokio DNS resolver
+                let resolved_names = lookup_host(format!("{hostname:}:{port:}")).await?;
+                // Take first found
+                resolved_names
+                    .into_iter()
+                    .nth(0)
+                    .ok_or(anyhow!(LurkError::UnresolvedDomainName(hostname.to_string())))
+            }
+        }
+    }
+
     pub async fn read_from<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Address> {
         use consts::address::*;
         let address_type = stream.read_u8().await?;
@@ -227,7 +243,6 @@ impl From<LurkError> for ReplyStatus {
                 Unsupported::Socks5Command(_) => ReplyStatus::CommandNotSupported,
                 Unsupported::IPv6Address => ReplyStatus::AddressTypeNotSupported,
             },
-            LurkError::NoAcceptableAuthMethod(_) => ReplyStatus::ConnectionNotAllowed,
             LurkError::UnresolvedDomainName(_) => ReplyStatus::HostUnreachable,
             _ => ReplyStatus::GeneralFailure,
         }

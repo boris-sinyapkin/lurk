@@ -18,10 +18,7 @@ use std::{
 
 macro_rules! assert_lurk_err {
     ($expected:expr, $actual:expr) => {
-        assert_eq!(
-            $expected,
-            $actual.downcast::<LurkError>().expect("Lurk error type expected")
-        )
+        assert_eq!($expected, $actual.downcast::<LurkError>().expect("Lurk error type expected"))
     };
 }
 
@@ -118,13 +115,12 @@ async fn rw_relay_messages() {
         ])
         .build();
 
-    RelayResponse::new(
-        ipv4_socket_address!(Ipv4Addr::new(127, 0, 0, 1), 11),
-        ReplyStatus::Succeeded,
-    )
-    .write_to(&mut write_stream)
-    .await
-    .expect("Relay response should be written");
+    let response = RelayResponse::builder()
+        .with_success()
+        .with_bound_address("127.0.0.1:11".parse().unwrap())
+        .build();
+
+    response.write_to(&mut write_stream).await.expect("Relay response should be written");
 }
 
 #[tokio::test]
@@ -152,13 +148,11 @@ async fn rw_address() {
 #[test]
 #[rustfmt::skip]
 fn error_to_relay_status_cast() {
-    let dummy_sockaddr = "127.0.0.1:8080".parse::<SocketAddr>().unwrap();
     let dummy_invalid_value_err = InvalidValue::AuthMethod(0xff);
     let dummy_utf8_err = String::from_utf8(vec![0xF1]).unwrap_err();
 
     assert_eq!(ReplyStatus::CommandNotSupported,     anyhow!(LurkError::Unsupported(Unsupported::Socks5Command(Command::Bind))).into());
     assert_eq!(ReplyStatus::AddressTypeNotSupported, anyhow!(LurkError::Unsupported(Unsupported::IPv6Address)).into());
-    assert_eq!(ReplyStatus::ConnectionNotAllowed,    anyhow!(LurkError::NoAcceptableAuthMethod(dummy_sockaddr)).into());
     assert_eq!(ReplyStatus::GeneralFailure,          anyhow!(LurkError::DataError(dummy_invalid_value_err)).into());
     assert_eq!(ReplyStatus::GeneralFailure,          anyhow!(LurkError::DomainNameDecodingFailed(dummy_utf8_err)).into());
     assert_eq!(ReplyStatus::ConnectionRefused,       anyhow!(io::Error::from(io::ErrorKind::ConnectionRefused)).into());

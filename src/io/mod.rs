@@ -3,6 +3,7 @@ use std::fmt::Debug;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 pub mod stream;
+pub mod tunnel;
 
 pub trait LurkRequest {
     async fn read_from<T: AsyncReadExt + Unpin>(stream: &mut T) -> Result<Self>
