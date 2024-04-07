@@ -1,11 +1,10 @@
+use super::{LurkRequest, LurkRequestRead, LurkResponse, LurkResponseWrite};
+use anyhow::Result;
+use log::trace;
 use std::{
     fmt::Debug,
     ops::{Deref, DerefMut},
 };
-
-use super::{LurkRequest, LurkRequestRead, LurkResponse, LurkResponseWrite};
-use anyhow::Result;
-use log::trace;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[cfg(test)]
