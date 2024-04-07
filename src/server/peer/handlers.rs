@@ -1,6 +1,5 @@
 use super::LurkPeer;
 use crate::{
-    auth::LurkAuthenticator,
     error::{LurkError, Unsupported},
     io::{tunnel::LurkTunnel, LurkRequestRead, LurkResponseWrite},
     proto::socks5::{
@@ -8,6 +7,7 @@ use crate::{
         response::{HandshakeResponse, RelayResponse},
         Command,
     },
+    server::auth::LurkAuthenticator,
 };
 use anyhow::{bail, Result};
 use log::debug;

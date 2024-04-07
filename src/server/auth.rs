@@ -1,6 +1,6 @@
+use super::peer::LurkPeer;
 use crate::{
     io::{LurkRequestRead, LurkResponseWrite},
-    peer::LurkPeer,
     proto::socks5::AuthMethod,
 };
 use log::error;

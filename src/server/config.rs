@@ -4,11 +4,7 @@ use std::net::Ipv4Addr;
 pub const LOG4RS_CONFIG_FILE_PATH: &str = "log/log4rs.yaml";
 
 #[derive(Default, Parser, Debug)]
-#[clap(
-    author = "Boris S. <boris.works@hotmail.com>",
-    about = "Simple SOCKS5 proxy server",
-    version
-)]
+#[clap(author = "Boris S. <boris.works@hotmail.com>", about = "Simple SOCKS5 proxy server", version)]
 pub struct LurkConfig {
     /// TCP port to listen on
     #[clap(short, long, default_value_t = 1080)]

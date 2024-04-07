@@ -1,6 +1,6 @@
 use self::handlers::LurkRequestHandler;
+use super::auth::LurkAuthenticator;
 use crate::{
-    auth::LurkAuthenticator,
     io::{stream::LurkStreamWrapper, LurkRequestRead, LurkResponseWrite},
     proto::socks5::{
         request::{HandshakeRequest, RelayRequest},

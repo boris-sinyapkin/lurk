@@ -1,9 +1,9 @@
 use anyhow::Result;
 use clap::Parser;
 use log4rs::config::Deserializers;
-use lurk::{
+use lurk::server::{
     config::{self, LurkConfig},
-    server::LurkServer,
+    LurkServer,
 };
 use std::net::{IpAddr, SocketAddr};
 

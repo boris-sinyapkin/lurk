@@ -10,7 +10,7 @@ pub enum LurkError {
     #[error("{0} is not supported")]
     Unsupported(Unsupported),
     #[error("unable to resolve domain name {0}")]
-    UnresolvedDomainName(String)
+    UnresolvedDomainName(String),
 }
 
 #[derive(Error, Debug, PartialEq)]
