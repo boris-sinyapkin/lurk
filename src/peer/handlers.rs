@@ -1,4 +1,4 @@
-use super::LurkClient;
+use super::LurkPeer;
 use crate::{
     auth::LurkAuthenticator,
     error::{LurkError, Unsupported},
@@ -24,7 +24,7 @@ pub struct LurkRequestHandler {}
 
 impl LurkRequestHandler {
     pub async fn handle_socks5_handshake_request<S>(
-        client: &mut LurkClient<S>,
+        peer: &mut LurkPeer<S>,
         request: HandshakeRequest,
         authenticator: &mut LurkAuthenticator,
     ) -> Result<()>
@@ -41,19 +41,15 @@ impl LurkRequestHandler {
             response_builder.with_no_acceptable_method();
         }
         // Communicate selected authentication method to client.
-        client.stream.write_response(response_builder.build()).await
+        peer.stream.write_response(response_builder.build()).await
     }
 
-    pub async fn handle_socks5_relay_request<'a, S>(
-        client: &mut LurkClient<S>,
-        request: RelayRequest,
-        server_address: SocketAddr,
-    ) -> Result<()>
+    pub async fn handle_socks5_relay_request<'a, S>(peer: &mut LurkPeer<S>, request: RelayRequest, server_address: SocketAddr) -> Result<()>
     where
         S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
         <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
     {
-        let mut command_handler = LurkCommandHandler::new(client);
+        let mut command_handler = LurkCommandHandler::new(peer);
         let target_address = request.target_addr().to_socket_addr().await?;
 
         match request.command() {
@@ -67,7 +63,7 @@ struct LurkCommandHandler<'a, S>
 where
     S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
 {
-    client: &'a mut LurkClient<S>,
+    peer: &'a mut LurkPeer<S>,
 }
 
 impl<'a, S> LurkCommandHandler<'a, S>
@@ -75,15 +71,15 @@ where
     S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
     <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(client: &'a mut LurkClient<S>) -> LurkCommandHandler<'a, S> {
-        LurkCommandHandler { client }
+    pub fn new(peer: &'a mut LurkPeer<S>) -> LurkCommandHandler<'a, S> {
+        LurkCommandHandler { peer }
     }
 
     pub async fn handle_socks5_connect(&mut self, server_address: SocketAddr, endpoint_address: SocketAddr) -> Result<()> {
-        debug!("Handling SOCKS5 CONNECT from {}", self.client);
+        debug!("Handling SOCKS5 CONNECT from {}", self.peer);
         debug!(
             "Starting data relaying tunnel: client [{}] <---> lurk [{}] <---> destination [{}]",
-            self.client, server_address, endpoint_address
+            self.peer, server_address, endpoint_address
         );
 
         // Establish TCP connection with the endpoint.
@@ -93,9 +89,9 @@ where
 
         // Respond to relay request with success.
         let response = RelayResponse::builder().with_success().with_bound_address(server_address).build();
-        self.client.stream.write_response(response).await?;
+        self.peer.stream.write_response(response).await?;
 
-        let mut l2r = &mut *self.client.stream;
+        let mut l2r = &mut *self.peer.stream;
 
         // Create proxy tunnel which operates with the following TCP streams:
         // - L2R: client   <--> proxy

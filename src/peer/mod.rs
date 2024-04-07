@@ -21,9 +21,9 @@ use tokio::{
 
 mod handlers;
 
-pub type LurkTcpClient = LurkClient<LurkStreamWrapper<TcpStream>>;
+pub type LurkTcpPeer = LurkPeer<LurkStreamWrapper<TcpStream>>;
 
-pub struct LurkClient<S>
+pub struct LurkPeer<S>
 where
     S: LurkRequestRead + LurkResponseWrite + Unpin,
 {
@@ -31,13 +31,13 @@ where
     stream: S,
 }
 
-impl<S> LurkClient<S>
+impl<S> LurkPeer<S>
 where
     S: LurkRequestRead + LurkResponseWrite + Unpin + DerefMut,
     <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(stream: S, addr: SocketAddr) -> LurkClient<S> {
-        LurkClient { stream, addr }
+    pub fn new(stream: S, addr: SocketAddr) -> LurkPeer<S> {
+        LurkPeer { stream, addr }
     }
 
     /// Handshaking with SOCKS5 client.
@@ -64,7 +64,7 @@ where
     }
 }
 
-impl<S> Display for LurkClient<S>
+impl<S> Display for LurkPeer<S>
 where
     S: LurkRequestRead + LurkResponseWrite + Unpin,
 {
@@ -92,13 +92,13 @@ mod tests {
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
         let mut stream = MockLurkStreamWrapper::<Mock>::new();
 
-        let client_methods = [AuthMethod::None, AuthMethod::GssAPI];
+        let peer_methods = [AuthMethod::None, AuthMethod::GssAPI];
         let agreed_method = AuthMethod::None;
 
         stream
             .expect_read_request()
             .once()
-            .returning(move || Ok(HandshakeRequest::new(HashSet::from(client_methods))));
+            .returning(move || Ok(HandshakeRequest::new(HashSet::from(peer_methods))));
 
         stream
             .expect_write_response()
@@ -106,10 +106,10 @@ mod tests {
             .with(predicate::eq(HandshakeResponse::builder().with_auth_method(agreed_method).build()))
             .returning(|_| Ok(()));
 
-        let mut client = LurkClient::new(stream, addr);
+        let mut peer = LurkPeer::new(stream, addr);
         let mut authenticator = LurkAuthenticator::new(false);
 
-        client.process_socks5_handshake(&mut authenticator).await.unwrap();
+        peer.process_socks5_handshake(&mut authenticator).await.unwrap();
         assert_eq!(agreed_method, authenticator.current_method().unwrap());
     }
 }

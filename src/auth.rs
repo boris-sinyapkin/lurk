@@ -1,6 +1,6 @@
 use crate::{
-    client::LurkClient,
     io::{LurkRequestRead, LurkResponseWrite},
+    peer::LurkPeer,
     proto::socks5::AuthMethod,
 };
 use log::error;
@@ -25,7 +25,7 @@ impl LurkAuthenticator {
     }
 
     #[allow(unused_variables)]
-    pub fn authenticate<S: LurkRequestRead + LurkResponseWrite + Unpin>(&self, client: &LurkClient<S>) -> bool {
+    pub fn authenticate<S: LurkRequestRead + LurkResponseWrite + Unpin>(&self, peer: &LurkPeer<S>) -> bool {
         match self.current_method() {
             Some(method) => match method {
                 AuthMethod::None => true,
@@ -40,11 +40,8 @@ impl LurkAuthenticator {
 
     /// Find any common authentication method between available
     /// auth methods on server and supported methods by client.
-    pub fn select_auth_method(&mut self, client_methods: &HashSet<AuthMethod>) {
-        let common_methods = self
-            .available_methods
-            .intersection(client_methods)
-            .collect::<HashSet<&AuthMethod>>();
+    pub fn select_auth_method(&mut self, peer_methods: &HashSet<AuthMethod>) {
+        let common_methods = self.available_methods.intersection(peer_methods).collect::<HashSet<&AuthMethod>>();
 
         self.selected_method = common_methods.into_iter().nth(0).copied();
     }
@@ -60,15 +57,15 @@ mod tests {
 
     #[test]
     fn pick_none_auth_method() {
-        let client_methods = HashSet::from([AuthMethod::GssAPI, AuthMethod::Password, AuthMethod::None]);
+        let peer_methods = HashSet::from([AuthMethod::GssAPI, AuthMethod::Password, AuthMethod::None]);
         {
             let mut authenticator = LurkAuthenticator::new(false);
-            authenticator.select_auth_method(&client_methods);
+            authenticator.select_auth_method(&peer_methods);
             assert_eq!(Some(AuthMethod::None), authenticator.current_method());
         }
         {
             let mut authenticator = LurkAuthenticator::new(true);
-            authenticator.select_auth_method(&client_methods);
+            authenticator.select_auth_method(&peer_methods);
             assert_eq!(None, authenticator.current_method());
         }
     }
