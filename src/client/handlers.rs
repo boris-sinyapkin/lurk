@@ -37,6 +37,8 @@ impl LurkRequestHandler {
         let mut response_builder = HandshakeResponse::builder();
         if let Some(method) = authenticator.current_method() {
             response_builder.with_auth_method(method);
+        } else {
+            response_builder.with_no_acceptable_method();
         }
         // Communicate selected authentication method to client.
         client.stream.write_response(response_builder.build()).await

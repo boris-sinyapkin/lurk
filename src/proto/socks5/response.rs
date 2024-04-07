@@ -43,24 +43,26 @@ impl LurkResponse for HandshakeResponse {
 }
 
 pub struct HandshakeResponseBuilder {
-    method: Option<AuthMethod>,
+    method: Option<u8>,
 }
 
 impl HandshakeResponseBuilder {
     pub fn with_auth_method(&mut self, selected_method: AuthMethod) -> &mut HandshakeResponseBuilder {
         debug_assert!(self.method.is_none(), "should be unset");
-        self.method = Some(selected_method);
+        self.method = Some(selected_method as u8);
+        self
+    }
+
+    pub fn with_no_acceptable_method(&mut self) -> &mut HandshakeResponseBuilder {
+        debug_assert!(self.method.is_none(), "should be unset");
+        self.method = Some(consts::auth::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE);
         self
     }
 
     pub fn build(&self) -> HandshakeResponse {
-        use consts::auth::*;
-        let method = if let Some(m) = self.method {
-            m as u8
-        } else {
-            SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE
-        };
-        HandshakeResponse { method }
+        HandshakeResponse {
+            method: self.method.expect("Expected valid SOCKS5 authentication constant"),
+        }
     }
 }
 

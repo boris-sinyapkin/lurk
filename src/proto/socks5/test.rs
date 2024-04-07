@@ -72,6 +72,7 @@ async fn rw_handshake_messages() {
         .expect("Handshake response with defined method should be written");
 
     HandshakeResponse::builder()
+        .with_no_acceptable_method()
         .build()
         .write_to(&mut write_stream)
         .await
