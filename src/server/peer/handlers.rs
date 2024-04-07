@@ -1,6 +1,6 @@
 use super::LurkPeer;
 use crate::{
-    error::{LurkError, Unsupported},
+    common::error::{LurkError, Unsupported},
     io::{tunnel::LurkTunnel, LurkRequestRead, LurkResponseWrite},
     proto::socks5::{
         request::{HandshakeRequest, RelayRequest},

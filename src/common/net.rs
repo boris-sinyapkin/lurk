@@ -1,4 +1,4 @@
-use crate::error::{LurkError, Unsupported};
+use crate::common::error::{LurkError, Unsupported};
 use anyhow::{anyhow, bail, Result};
 use bytes::BufMut;
 use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};

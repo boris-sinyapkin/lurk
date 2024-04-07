@@ -1,5 +1,5 @@
-use super::{consts, Address, AuthMethod, ReplyStatus};
-use crate::io::LurkResponse;
+use super::{consts, Address, ReplyStatus};
+use crate::{common::LurkAuthMethod, io::LurkResponse};
 use anyhow::{bail, Result};
 use bytes::{BufMut, BytesMut};
 use log::error;
@@ -30,7 +30,7 @@ impl LurkResponse for HandshakeResponse {
         use consts::auth::*;
         // Just checking that method value is benign.
         if self.method != SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE {
-            if let Err(err) = AuthMethod::try_from(self.method) {
+            if let Err(err) = LurkAuthMethod::from_socks5_const(self.method) {
                 error!("Unable to convert authentication method to any of SOCKS5 constants");
                 debug_assert!(false);
                 bail!(err)
@@ -47,7 +47,7 @@ pub struct HandshakeResponseBuilder {
 }
 
 impl HandshakeResponseBuilder {
-    pub fn with_auth_method(&mut self, selected_method: AuthMethod) -> &mut HandshakeResponseBuilder {
+    pub fn with_auth_method(&mut self, selected_method: LurkAuthMethod) -> &mut HandshakeResponseBuilder {
         debug_assert!(self.method.is_none(), "should be unset");
         self.method = Some(selected_method as u8);
         self

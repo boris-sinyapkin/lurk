@@ -76,10 +76,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        io::stream::MockLurkStreamWrapper,
-        proto::socks5::{response::HandshakeResponse, AuthMethod},
-    };
+    use crate::{common::LurkAuthMethod, io::stream::MockLurkStreamWrapper, proto::socks5::response::HandshakeResponse};
     use mockall::predicate;
     use std::{
         collections::HashSet,
@@ -92,8 +89,8 @@ mod tests {
         let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
         let mut stream = MockLurkStreamWrapper::<Mock>::new();
 
-        let peer_methods = [AuthMethod::None, AuthMethod::GssAPI];
-        let agreed_method = AuthMethod::None;
+        let peer_methods = [LurkAuthMethod::None, LurkAuthMethod::GssAPI];
+        let agreed_method = LurkAuthMethod::None;
 
         stream
             .expect_read_request()

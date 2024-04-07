@@ -1,6 +1,5 @@
 pub mod server;
 
-mod error;
+mod common;
 mod io;
-mod net;
 mod proto;

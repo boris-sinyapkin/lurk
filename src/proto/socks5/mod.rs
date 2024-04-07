@@ -4,8 +4,11 @@
 /// RFC 1928
 /// https://datatracker.ietf.org/doc/html/rfc1928#ref-1
 ///
-use crate::error::{InvalidValue, LurkError, Unsupported};
-use crate::net::Address;
+use crate::common::{
+    error::{InvalidValue, LurkError, Unsupported},
+    net::Address,
+    LurkAuthMethod,
+};
 use anyhow::{bail, Result};
 use bytes::BufMut;
 use std::{fmt::Display, net::SocketAddr};
@@ -53,25 +56,14 @@ mod consts {
     }
 }
 
-#[repr(u8)]
-#[rustfmt::skip]
-#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
-pub enum AuthMethod {
-    None,
-    GssAPI,
-    Password,
-}
-
-impl TryFrom<u8> for AuthMethod {
-    type Error = LurkError;
-
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
+impl LurkAuthMethod {
+    pub fn from_socks5_const(value: u8) -> Result<LurkAuthMethod> {
         use consts::auth::*;
         match value {
-            SOCKS5_AUTH_METHOD_NONE => Ok(AuthMethod::None),
-            SOCKS5_AUTH_METHOD_GSSAPI => Ok(AuthMethod::GssAPI),
-            SOCKS5_AUTH_METHOD_PASSWORD => Ok(AuthMethod::Password),
-            _ => Err(LurkError::DataError(InvalidValue::AuthMethod(value))),
+            SOCKS5_AUTH_METHOD_NONE => Ok(LurkAuthMethod::None),
+            SOCKS5_AUTH_METHOD_GSSAPI => Ok(LurkAuthMethod::GssAPI),
+            SOCKS5_AUTH_METHOD_PASSWORD => Ok(LurkAuthMethod::Password),
+            _ => bail!(LurkError::DataError(InvalidValue::AuthMethod(value))),
         }
     }
 }

@@ -1,5 +1,9 @@
-use super::{Address, AuthMethod, Command};
-use crate::{error::InvalidValue, io::LurkRequest, proto::socks5::consts};
+use super::{Address, Command};
+use crate::{
+    common::{error::InvalidValue, LurkAuthMethod},
+    io::LurkRequest,
+    proto::socks5::consts,
+};
 use anyhow::{ensure, Result};
 use cfg_if::cfg_if;
 use std::collections::HashSet;
@@ -15,19 +19,19 @@ use tokio::io::AsyncReadExt;
 
 #[derive(Debug)]
 pub struct HandshakeRequest {
-    auth_methods: HashSet<AuthMethod>,
+    auth_methods: HashSet<LurkAuthMethod>,
 }
 
 impl HandshakeRequest {
     cfg_if! {
         if #[cfg(test)] {
-            pub fn new(auth_methods: HashSet<AuthMethod>) -> HandshakeRequest {
+            pub fn new(auth_methods: HashSet<LurkAuthMethod>) -> HandshakeRequest {
                 HandshakeRequest { auth_methods }
             }
         }
     }
 
-    pub fn auth_methods(&self) -> &HashSet<AuthMethod> {
+    pub fn auth_methods(&self) -> &HashSet<LurkAuthMethod> {
         &self.auth_methods
     }
 }
@@ -43,10 +47,7 @@ impl LurkRequest for HandshakeRequest {
         let (version, nmethods) = (header[0], header[1]);
 
         // Bail out if version is not supported.
-        ensure!(
-            version == consts::SOCKS5_VERSION,
-            InvalidValue::ProtocolVersion(version)
-        );
+        ensure!(version == consts::SOCKS5_VERSION, InvalidValue::ProtocolVersion(version));
 
         // Parse requested auth methods.
         let auth_methods = match nmethods {
@@ -58,8 +59,8 @@ impl LurkRequest for HandshakeRequest {
                 // Drop unknown auth methods.
                 methods
                     .iter()
-                    .map(|&m| Ok(AuthMethod::try_from(m)?))
-                    .collect::<Result<HashSet<AuthMethod>>>()?
+                    .map(|&m| LurkAuthMethod::from_socks5_const(m))
+                    .collect::<Result<HashSet<LurkAuthMethod>>>()?
             }
         };
 
@@ -99,10 +100,7 @@ impl LurkRequest for RelayRequest {
 
         let (version, cmd, reserved) = (buff[0], buff[1], buff[2]);
 
-        ensure!(
-            version == consts::SOCKS5_VERSION,
-            InvalidValue::ProtocolVersion(version)
-        );
+        ensure!(version == consts::SOCKS5_VERSION, InvalidValue::ProtocolVersion(version));
         ensure!(reserved == 0x00, InvalidValue::ReservedValue(reserved));
 
         let command = Command::try_from(cmd)?;

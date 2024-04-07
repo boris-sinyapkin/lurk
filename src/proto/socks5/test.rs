@@ -1,12 +1,15 @@
 use crate::{
-    error::{InvalidValue, LurkError, Unsupported},
+    common::{
+        error::{InvalidValue, LurkError, Unsupported},
+        net::ipv4_socket_address,
+        LurkAuthMethod,
+    },
     io::{LurkRequest, LurkResponse},
-    net::ipv4_socket_address,
     proto::socks5::{
         consts::*,
         request::{HandshakeRequest, RelayRequest},
         response::{HandshakeResponse, RelayResponse},
-        Address, AuthMethod, Command, ReplyStatus,
+        Address, Command, ReplyStatus,
     },
 };
 use anyhow::anyhow;
@@ -49,7 +52,7 @@ async fn rw_handshake_messages() {
         .expect("Handshale request should be parsed");
 
     assert_eq!(
-        &HashSet::from([AuthMethod::Password, AuthMethod::GssAPI, AuthMethod::None]),
+        &HashSet::from([LurkAuthMethod::Password, LurkAuthMethod::GssAPI, LurkAuthMethod::None]),
         request.auth_methods(),
         "Handshake request parsed incorrectly"
     );
@@ -65,7 +68,7 @@ async fn rw_handshake_messages() {
         .build();
 
     HandshakeResponse::builder()
-        .with_auth_method(AuthMethod::GssAPI)
+        .with_auth_method(LurkAuthMethod::GssAPI)
         .build()
         .write_to(&mut write_stream)
         .await
