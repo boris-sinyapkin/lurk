@@ -99,6 +99,8 @@ where
         let mut tunnel = LurkTunnel::new(&mut l2r, &mut r2l);
 
         // Start data relaying
-        tunnel.run().await
+        tunnel.run().await;
+
+        Ok(())
     }
 }

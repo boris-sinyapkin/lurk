@@ -1,4 +1,3 @@
-use anyhow::{bail, Result};
 use log::{debug, error};
 use tokio::io::{copy_bidirectional, AsyncRead, AsyncWrite};
 
@@ -20,14 +19,12 @@ where
         LurkTunnel { l2r, r2l }
     }
 
-    pub async fn run(&mut self) -> Result<()> {
+    pub async fn run(&mut self) {
         match copy_bidirectional(self.l2r, self.r2l).await {
             Ok((l2r, r2l)) => debug!("Tunnel closed, L2R {} bytes, R2L {} bytes transmitted", l2r, r2l),
             Err(err) => {
                 error!("Tunnel closed with error: {}", err);
-                bail!(err)
             }
         }
-        Ok(())
     }
 }
