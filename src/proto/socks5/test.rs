@@ -1,9 +1,9 @@
 use crate::{
     error::{InvalidValue, LurkError, Unsupported},
     io::{LurkRequest, LurkResponse},
+    net::ipv4_socket_address,
     proto::socks5::{
         consts::*,
-        ipv4_socket_address,
         request::{HandshakeRequest, RelayRequest},
         response::{HandshakeResponse, RelayResponse},
         Address, AuthMethod, Command, ReplyStatus,
