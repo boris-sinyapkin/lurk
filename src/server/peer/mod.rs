@@ -1,5 +1,4 @@
-use self::handlers::LurkRequestHandler;
-use super::auth::LurkAuthenticator;
+use self::{auth::LurkAuthenticator, handlers::LurkRequestHandler};
 use crate::{
     io::{stream::LurkStreamWrapper, LurkRequestRead, LurkResponseWrite},
     proto::socks5::request::{HandshakeRequest, RelayRequest},
@@ -14,6 +13,8 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpStream,
 };
+
+pub mod auth;
 
 mod handlers;
 

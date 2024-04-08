@@ -1,4 +1,4 @@
-use super::LurkPeer;
+use super::{auth::LurkAuthenticator, LurkPeer};
 use crate::{
     common::{
         error::{unsupported, LurkError, Unsupported},
@@ -10,7 +10,6 @@ use crate::{
         response::{HandshakeResponse, RelayResponse},
         Command,
     },
-    server::auth::LurkAuthenticator,
 };
 use anyhow::{bail, Error, Result};
 use log::debug;

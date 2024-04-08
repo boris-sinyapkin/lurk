@@ -1,4 +1,4 @@
-use super::peer::LurkPeer;
+use super::LurkPeer;
 use crate::{
     common::LurkAuthMethod,
     io::{LurkRequestRead, LurkResponseWrite},

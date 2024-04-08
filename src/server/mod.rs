@@ -1,13 +1,12 @@
 use crate::{
     io::stream::LurkStreamWrapper,
-    server::{auth::LurkAuthenticator, peer::LurkTcpPeer},
+    server::peer::{auth::LurkAuthenticator, LurkTcpPeer},
 };
 use anyhow::Result;
 use log::{error, info, warn};
 use std::net::SocketAddr;
 use tokio::net::{TcpListener, TcpStream};
 
-mod auth;
 mod peer;
 
 pub mod config;
