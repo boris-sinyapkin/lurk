@@ -99,7 +99,10 @@ impl Address {
         match address_type {
             SOCKS5_ADDR_TYPE_IPV4 => Address::read_ipv4(stream).await,
             SOCKS5_ADDR_TYPE_IPV6 => Address::read_ipv6(stream).await,
-            SOCKS5_ADDR_TYPE_DOMAIN_NAME => Address::read_domain_name(stream).await,
+            SOCKS5_ADDR_TYPE_DOMAIN_NAME => {
+                let len = stream.read_u8().await?;
+                Address::read_domain_name(stream, len).await
+            }
             _ => bail!(LurkError::DataError(InvalidValue::AddressType(address_type))),
         }
     }

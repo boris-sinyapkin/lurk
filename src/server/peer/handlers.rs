@@ -1,7 +1,7 @@
 use super::LurkPeer;
 use crate::{
     common::{
-        error::{LurkError, Unsupported},
+        error::{unsupported, LurkError, Unsupported},
         net::Address,
     },
     io::{tunnel::LurkTunnel, LurkRequestRead, LurkResponseWrite},
@@ -36,6 +36,7 @@ impl LurkRequestHandler {
     {
         // Pick authentication method.
         authenticator.select_auth_method(request.auth_methods());
+
         // Prepare response.
         let mut response_builder = HandshakeResponse::builder();
         if let Some(method) = authenticator.current_method() {
@@ -43,6 +44,7 @@ impl LurkRequestHandler {
         } else {
             response_builder.with_no_acceptable_method();
         }
+
         // Communicate selected authentication method to the client.
         peer.stream.write_response(response_builder.build()).await
     }
@@ -61,7 +63,7 @@ impl LurkRequestHandler {
                     .handle_socks5_connect(server_address, request.endpoint_address())
                     .await
             }
-            cmd => bail!(LurkError::Unsupported(Unsupported::Socks5Command(cmd))),
+            cmd => unsupported!(Unsupported::Socks5Command(cmd)),
         };
 
         // If error occured, handle it with respond to processing relay request.

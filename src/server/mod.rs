@@ -55,7 +55,6 @@ impl LurkServer {
             if let Err(err) = handler.handle_socks5_peer(&mut peer).await {
                 error!("Error occured during handling of {}, {}", addr, err);
             }
-
             info!("Connection with {} has been finished", peer);
         });
     }

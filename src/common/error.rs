@@ -1,6 +1,15 @@
 use crate::proto::socks5::Command;
 use thiserror::Error;
 
+/// Bails out with unsupported error
+macro_rules! unsupported {
+    ($x:expr) => {
+        bail!(LurkError::Unsupported($x))
+    };
+}
+
+pub(crate) use unsupported;
+
 #[derive(Error, Debug, PartialEq)]
 pub enum LurkError {
     #[error("data has incorrect / corrupted field: {0}")]
