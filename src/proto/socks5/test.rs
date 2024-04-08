@@ -159,7 +159,6 @@ fn error_to_relay_status_cast() {
     let dummy_utf8_err = String::from_utf8(vec![0xF1]).unwrap_err();
 
     assert_eq!(ReplyStatus::CommandNotSupported,     anyhow!(LurkError::Unsupported(Unsupported::Socks5Command(Command::Bind))).into());
-    assert_eq!(ReplyStatus::AddressTypeNotSupported, anyhow!(LurkError::Unsupported(Unsupported::IPv6Address)).into());
     assert_eq!(ReplyStatus::GeneralFailure,          anyhow!(LurkError::DataError(dummy_invalid_value_err)).into());
     assert_eq!(ReplyStatus::GeneralFailure,          anyhow!(LurkError::DomainNameDecodingFailed(dummy_utf8_err)).into());
     assert_eq!(ReplyStatus::ConnectionRefused,       anyhow!(io::Error::from(io::ErrorKind::ConnectionRefused)).into());

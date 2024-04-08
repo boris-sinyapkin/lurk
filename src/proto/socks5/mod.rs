@@ -163,7 +163,6 @@ impl From<LurkError> for ReplyStatus {
         match err {
             LurkError::Unsupported(unsupported) => match unsupported {
                 Unsupported::Socks5Command(_) => ReplyStatus::CommandNotSupported,
-                Unsupported::IPv6Address => ReplyStatus::AddressTypeNotSupported,
             },
             LurkError::UnresolvedDomainName(_) => ReplyStatus::HostUnreachable,
             _ => ReplyStatus::GeneralFailure,

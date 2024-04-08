@@ -40,6 +40,4 @@ pub enum InvalidValue {
 pub enum Unsupported {
     #[error("{0:?} SOCKS5 command")]
     Socks5Command(Command),
-    #[error("IPv6 network address")]
-    IPv6Address,
 }
