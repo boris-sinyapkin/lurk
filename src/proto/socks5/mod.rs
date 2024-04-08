@@ -11,7 +11,7 @@ use crate::common::{
 };
 use anyhow::{bail, Result};
 use bytes::BufMut;
-use std::{fmt::Display, net::SocketAddr};
+use std::net::SocketAddr;
 use tokio::io::AsyncReadExt;
 
 pub mod request;
@@ -118,15 +118,6 @@ impl Address {
                 buf.put_u8(consts::address::SOCKS5_ADDR_TYPE_DOMAIN_NAME);
                 Address::write_domain_name(buf, name, port)
             }
-        }
-    }
-}
-
-impl Display for Address {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Address::SocketAddress(sock) => write!(f, "{sock:}"),
-            Address::DomainName(name, port) => write!(f, "{name:}:{port:}"),
         }
     }
 }

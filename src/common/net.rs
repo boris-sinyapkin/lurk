@@ -1,7 +1,10 @@
 use crate::common::error::{LurkError, Unsupported};
 use anyhow::{anyhow, bail, Result};
 use bytes::BufMut;
-use std::net::{SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::{
+    fmt::Display,
+    net::{SocketAddr, SocketAddrV4, SocketAddrV6},
+};
 use tokio::{io::AsyncReadExt, net::lookup_host};
 
 macro_rules! ipv4_socket_address {
@@ -72,5 +75,14 @@ impl Address {
     #[allow(unused_variables)]
     pub fn write_domain_name<T: BufMut>(bytes: &mut T, name: &str, port: &u16) {
         todo!("Writing of domain names is not implemented")
+    }
+}
+
+impl Display for Address {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Address::SocketAddress(sock) => write!(f, "{sock:}"),
+            Address::DomainName(name, port) => write!(f, "{name:}:{port:}"),
+        }
     }
 }
