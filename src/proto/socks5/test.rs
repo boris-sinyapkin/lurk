@@ -103,7 +103,7 @@ async fn rw_relay_messages() {
     assert_eq!(Command::Connect, request.command());
     assert_eq!(
         &ipv4_socket_address!(Ipv4Addr::new(127, 0, 0, 1), 2570),
-        request.target_addr(),
+        request.endpoint_address(),
         "Relay request parsed incorrectly"
     );
 

@@ -80,7 +80,7 @@ impl LurkRequest for HandshakeRequest {
 #[derive(Debug)]
 pub struct RelayRequest {
     command: Command,
-    target_addr: Address,
+    endpoint_address: Address,
 }
 
 impl RelayRequest {
@@ -88,8 +88,8 @@ impl RelayRequest {
         self.command
     }
 
-    pub fn target_addr(&self) -> &Address {
-        &self.target_addr
+    pub fn endpoint_address(&self) -> &Address {
+        &self.endpoint_address
     }
 }
 
@@ -104,8 +104,8 @@ impl LurkRequest for RelayRequest {
         ensure!(reserved == 0x00, InvalidValue::ReservedValue(reserved));
 
         let command = Command::try_from(cmd)?;
-        let target_addr = Address::read_from(stream).await?;
+        let endpoint_address = Address::read_from(stream).await?;
 
-        Ok(RelayRequest { command, target_addr })
+        Ok(RelayRequest { command, endpoint_address })
     }
 }

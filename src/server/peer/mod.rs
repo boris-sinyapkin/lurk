@@ -2,13 +2,9 @@ use self::handlers::LurkRequestHandler;
 use super::auth::LurkAuthenticator;
 use crate::{
     io::{stream::LurkStreamWrapper, LurkRequestRead, LurkResponseWrite},
-    proto::socks5::{
-        request::{HandshakeRequest, RelayRequest},
-        response::RelayResponse,
-    },
+    proto::socks5::request::{HandshakeRequest, RelayRequest},
 };
 use anyhow::Result;
-use log::debug;
 use std::{
     fmt::Display,
     net::SocketAddr,
@@ -52,15 +48,7 @@ where
     pub async fn process_socks5_command(&mut self, server_address: SocketAddr) -> Result<()> {
         let request = self.stream.read_request::<RelayRequest>().await?;
 
-        if let Err(err) = LurkRequestHandler::handle_socks5_relay_request(self, request, server_address).await {
-            let error_string = err.to_string();
-            let response = RelayResponse::builder().with_err(err).with_bound_address(server_address).build();
-
-            debug!("Error: '{}'. Response: '{:?}' to {}", error_string, response, self);
-            self.stream.write_response(response).await?;
-        }
-
-        Ok(())
+        LurkRequestHandler::handle_socks5_relay_request(self, request, server_address).await
     }
 }
 

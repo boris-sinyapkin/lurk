@@ -1,6 +1,9 @@
 use super::LurkPeer;
 use crate::{
-    common::error::{LurkError, Unsupported},
+    common::{
+        error::{LurkError, Unsupported},
+        net::Address,
+    },
     io::{tunnel::LurkTunnel, LurkRequestRead, LurkResponseWrite},
     proto::socks5::{
         request::{HandshakeRequest, RelayRequest},
@@ -9,7 +12,7 @@ use crate::{
     },
     server::auth::LurkAuthenticator,
 };
-use anyhow::{bail, Result};
+use anyhow::{bail, Error, Result};
 use log::debug;
 use std::{
     net::SocketAddr,
@@ -40,22 +43,44 @@ impl LurkRequestHandler {
         } else {
             response_builder.with_no_acceptable_method();
         }
-        // Communicate selected authentication method to client.
+        // Communicate selected authentication method to the client.
         peer.stream.write_response(response_builder.build()).await
     }
 
-    pub async fn handle_socks5_relay_request<'a, S>(peer: &mut LurkPeer<S>, request: RelayRequest, server_address: SocketAddr) -> Result<()>
+    pub async fn handle_socks5_relay_request<S>(peer: &mut LurkPeer<S>, request: RelayRequest, server_address: SocketAddr) -> Result<()>
     where
         S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
         <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
     {
         let mut command_handler = LurkCommandHandler::new(peer);
-        let target_address = request.target_addr().to_socket_addr().await?;
 
-        match request.command() {
-            Command::Connect => command_handler.handle_socks5_connect(server_address, target_address).await,
+        // Handle SOCKS5 command that encapsulated in relay request data.
+        let result = match request.command() {
+            Command::Connect => {
+                command_handler
+                    .handle_socks5_connect(server_address, request.endpoint_address())
+                    .await
+            }
             cmd => bail!(LurkError::Unsupported(Unsupported::Socks5Command(cmd))),
+        };
+
+        // If error occured, handle it with respond to processing relay request.
+        if let Err(err) = result {
+            LurkRequestHandler::handle_error_with_response(peer, server_address, err).await?;
         }
+
+        Ok(())
+    }
+
+    async fn handle_error_with_response<S>(peer: &mut LurkPeer<S>, server_address: SocketAddr, err: Error) -> Result<()>
+    where
+        S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
+    {
+        let error_string = err.to_string();
+        let response = RelayResponse::builder().with_err(err).with_bound_address(server_address).build();
+
+        debug!("Error: '{}'. Response: '{:?}' to {}", error_string, response, peer);
+        peer.stream.write_response(response).await
     }
 }
 
@@ -75,12 +100,15 @@ where
         LurkCommandHandler { peer }
     }
 
-    pub async fn handle_socks5_connect(&mut self, server_address: SocketAddr, endpoint_address: SocketAddr) -> Result<()> {
+    pub async fn handle_socks5_connect(&mut self, server_address: SocketAddr, endpoint_address: &Address) -> Result<()> {
         debug!("Handling SOCKS5 CONNECT from {}", self.peer);
         debug!(
             "Starting data relaying tunnel: client [{}] <---> lurk [{}] <---> destination [{}]",
             self.peer, server_address, endpoint_address
         );
+
+        // Resolve endpoint address.
+        let endpoint_address = endpoint_address.to_socket_addr().await?;
 
         // Establish TCP connection with the endpoint.
         debug!("Establishing TCP connection with the endpoint {} ... ", endpoint_address);
