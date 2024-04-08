@@ -4,7 +4,11 @@ use crate::{
     io::{LurkRequestRead, LurkResponseWrite},
 };
 use log::error;
-use std::collections::HashSet;
+use std::{
+    collections::HashSet,
+    ops::{Deref, DerefMut},
+};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 pub struct LurkAuthenticator {
     available_methods: HashSet<LurkAuthMethod>,
@@ -24,15 +28,18 @@ impl LurkAuthenticator {
         }
     }
 
-    #[allow(unused_variables)]
-    pub fn authenticate<S: LurkRequestRead + LurkResponseWrite + Unpin>(&self, peer: &LurkPeer<S>) -> bool {
+    pub fn authenticate<S>(&self, peer: &LurkPeer<S>) -> bool
+    where
+        S: LurkRequestRead + LurkResponseWrite + Unpin + DerefMut,
+        <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
+    {
         match self.current_method() {
             Some(method) => match method {
                 LurkAuthMethod::None => true,
                 _ => todo!("Unsupported authentication method {:?}", method),
             },
             None => {
-                error!("Authentication method has not been selected");
+                error!("Tried to authenticate {peer:}, but method has not been selected");
                 false
             }
         }
