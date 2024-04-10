@@ -29,10 +29,7 @@ impl LurkServer {
         loop {
             match tcp_listener.accept().await {
                 Ok((stream, addr)) => self.on_new_peer_connected(stream, addr),
-                Err(err) => {
-                    warn!("Error while accepting the TCP connection: {}", err);
-                    continue;
-                }
+                Err(err) => warn!("Error while accepting the TCP connection: {}", err),
             }
         }
     }
@@ -40,16 +37,19 @@ impl LurkServer {
     async fn bind(&self) -> Result<TcpListener> {
         let tcp_listener = TcpListener::bind(self.addr).await?;
         info!("Listening on {}", self.addr);
+
         Ok(tcp_listener)
     }
 
     fn on_new_peer_connected(&self, stream: TcpStream, addr: SocketAddr) {
         info!("New connection has been established from {}", addr);
+
         let mut peer = LurkTcpPeer::new(LurkStreamWrapper::new(stream), addr);
         let mut handler = LurkConnectionHandler {
             server_addr: self.addr,
             authenticator: LurkAuthenticator::new(self.auth_enabled),
         };
+
         tokio::spawn(async move {
             if let Err(err) = handler.handle_socks5_peer(&mut peer).await {
                 error!("Error occured during handling of {}, {}", addr, err);
@@ -75,9 +75,7 @@ impl LurkConnectionHandler {
         // Proceed with SOCKS5 relay handling.
         // This will receive and process relay request, handle SOCKS5 command
         // and establish the tunnel "client <-- lurk proxy --> target".
-        peer.process_socks5_command(self.server_addr).await?;
-
-        Ok(())
+        peer.process_socks5_command(self.server_addr).await
     }
 }
 
