@@ -4,7 +4,10 @@ use crate::{
         error::{unsupported, LurkError, Unsupported},
         net::Address,
     },
-    io::{tunnel::LurkTunnel, LurkRequestRead, LurkResponseWrite},
+    io::{
+        tunnel::{log_tunnel_closed, log_tunnel_closed_with_error, log_tunnel_created, LurkTunnel},
+        LurkRequestRead, LurkResponseWrite,
+    },
     proto::socks5::{
         request::{HandshakeRequest, RelayRequest},
         response::{HandshakeResponse, RelayResponse},
@@ -12,7 +15,8 @@ use crate::{
     },
 };
 use anyhow::{bail, Error, Result};
-use log::debug;
+use human_bytes::human_bytes;
+use log::{debug, error, info};
 use std::{
     net::SocketAddr,
     ops::{Deref, DerefMut},
@@ -40,8 +44,10 @@ impl LurkRequestHandler {
         let mut response_builder = HandshakeResponse::builder();
         if let Some(method) = authenticator.current_method() {
             response_builder.with_auth_method(method);
+            info!("Selected authentication method {:?} for {}", method, peer);
         } else {
             response_builder.with_no_acceptable_method();
+            info!("No acceptable methods identified for for {}", peer);
         }
 
         // Communicate selected authentication method to the client.
@@ -102,13 +108,11 @@ where
     }
 
     pub async fn handle_socks5_connect(&mut self, server_address: SocketAddr, endpoint_address: &Address) -> Result<()> {
-        debug!("Handling SOCKS5 CONNECT from {}", self.peer);
-        debug!(
-            "Starting data relaying tunnel: client [{}] <---> lurk [{}] <---> destination [{}]",
-            self.peer, server_address, endpoint_address
-        );
+        info!("Handling SOCKS5 CONNECT from {}", self.peer);
+        let peer_address = self.peer.to_string();
 
         // Resolve endpoint address.
+        debug!("Resolving endpoint address {}", endpoint_address);
         let endpoint_address = endpoint_address.to_socket_addr().await?;
 
         // Establish TCP connection with the endpoint.
@@ -127,8 +131,17 @@ where
         // - R2L: endpoint <--> proxy
         let mut tunnel = LurkTunnel::new(&mut l2r, &mut r2l);
 
+        log_tunnel_created!(peer_address, server_address, endpoint_address);
+
         // Start data relaying
-        tunnel.run().await;
+        match tunnel.run().await {
+            Ok((l2r, r2l)) => {
+                log_tunnel_closed!(peer_address, server_address, endpoint_address, l2r, r2l);
+            }
+            Err(err) => {
+                log_tunnel_closed_with_error!(peer_address, server_address, endpoint_address, err);
+            }
+        }
 
         Ok(())
     }

@@ -5,6 +5,6 @@ appenders:
             pattern: "{h({d(%Y-%m-%d %H:%M:%S.%6f %Z)(utc)} | {({l}):5.5} | [{M}])} {m}{n}"
 
 root:
-    level: trace
+    level: info
     appenders:
         - stdout
