@@ -1,5 +1,5 @@
 
-![GitHub Workflow](https://github.com/boris-sinyapkin/lurk/actions/workflows/ci.yml/badge.svg?branch=dev)
+![GitHub CI dev](https://github.com/boris-sinyapkin/lurk/actions/workflows/ci.yaml/badge.svg?branch=dev)
 
 
 # Lurk
