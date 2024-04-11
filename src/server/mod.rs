@@ -1,3 +1,4 @@
+use self::peer::handlers::LurkSocks5ClientHandler;
 use crate::{
     io::stream::LurkStreamWrapper,
     server::peer::{auth::LurkAuthenticator, LurkTcpPeer},
@@ -46,12 +47,12 @@ impl LurkServer {
 
         let mut peer = LurkTcpPeer::new(LurkStreamWrapper::new(stream), addr);
         let mut handler = LurkConnectionHandler {
-            server_addr: self.addr,
+            server_address: self.addr,
             authenticator: LurkAuthenticator::new(self.auth_enabled),
         };
 
         tokio::spawn(async move {
-            if let Err(err) = handler.handle_socks5_peer(&mut peer).await {
+            if let Err(err) = handler.handle_peer(&mut peer).await {
                 error!("Error occured during handling of {}, {}", addr, err);
             }
             info!("Connection with {} has been finished", peer);
@@ -60,22 +61,15 @@ impl LurkServer {
 }
 
 struct LurkConnectionHandler {
-    server_addr: SocketAddr,
+    server_address: SocketAddr,
     authenticator: LurkAuthenticator,
 }
 
 impl LurkConnectionHandler {
-    async fn handle_socks5_peer(&mut self, peer: &mut LurkTcpPeer) -> Result<()> {
-        // Complete handshake process and negotiate the authentication method.
-        peer.process_socks5_handshake(&mut self.authenticator).await?;
+    async fn handle_peer(&mut self, peer: &mut LurkTcpPeer) -> Result<()> {
+        let mut socks5_handler = LurkSocks5ClientHandler::new(peer, &mut self.authenticator, self.server_address);
 
-        // Authenticate client with selected method.
-        self.authenticator.authenticate(peer);
-
-        // Proceed with SOCKS5 relay handling.
-        // This will receive and process relay request, handle SOCKS5 command
-        // and establish the tunnel "client <-- lurk proxy --> target".
-        peer.process_socks5_command(self.server_addr).await
+        socks5_handler.handle_peer().await
     }
 }
 

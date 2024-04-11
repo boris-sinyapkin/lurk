@@ -26,7 +26,62 @@ use tokio::{
     net::TcpStream,
 };
 
-pub struct LurkSocks5RequestHandler {}
+pub struct LurkSocks5ClientHandler<'a, S>
+where
+    S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
+{
+    peer: &'a mut LurkPeer<S>,
+    authenticator: &'a mut LurkAuthenticator,
+    server_address: SocketAddr,
+}
+
+impl<'a, S> LurkSocks5ClientHandler<'a, S>
+where
+    S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
+    <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
+{
+    pub fn new(
+        peer: &'a mut LurkPeer<S>,
+        authenticator: &'a mut LurkAuthenticator,
+        server_address: SocketAddr,
+    ) -> LurkSocks5ClientHandler<'a, S> {
+        LurkSocks5ClientHandler {
+            peer,
+            authenticator,
+            server_address,
+        }
+    }
+
+    pub async fn handle_peer(&mut self) -> Result<()> {
+        // Complete handshake process and negotiate the authentication method.
+        self.process_handshake().await?;
+
+        // Authenticate client with selected method.
+        self.authenticator.authenticate(self.peer);
+
+        // Proceed with SOCKS5 relay handling.
+        // This will receive and process relay request, handle SOCKS5 command
+        // and establish the tunnel "client <-- lurk proxy --> target".
+        self.process_command().await
+    }
+
+    /// Handshaking with SOCKS5 client.
+    /// Afterwards, authenticator should contain negotiated method.
+    async fn process_handshake(&mut self) -> Result<()> {
+        let request = self.peer.stream.read_request::<HandshakeRequest>().await?;
+
+        LurkSocks5RequestHandler::handle_handshake_request(self.peer, request, self.authenticator).await
+    }
+
+    /// Handling SOCKS5 command which comes in relay request from client.
+    async fn process_command(&mut self) -> Result<()> {
+        let request = self.peer.stream.read_request::<RelayRequest>().await?;
+
+        LurkSocks5RequestHandler::handle_relay_request(self.peer, request, self.server_address).await
+    }
+}
+
+struct LurkSocks5RequestHandler {}
 
 impl LurkSocks5RequestHandler {
     pub async fn handle_handshake_request<S>(
@@ -129,5 +184,44 @@ impl LurkSocks5CommandHandler {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{common::LurkAuthMethod, io::stream::MockLurkStreamWrapper, proto::socks5::response::HandshakeResponse};
+    use mockall::predicate;
+    use std::{
+        collections::HashSet,
+        net::{IpAddr, Ipv4Addr},
+    };
+    use tokio_test::io::Mock;
+
+    #[tokio::test]
+    async fn socks5_handshake() {
+        let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
+        let mut stream = MockLurkStreamWrapper::<Mock>::new();
+
+        let peer_methods = [LurkAuthMethod::None, LurkAuthMethod::GssAPI];
+        let agreed_method = LurkAuthMethod::None;
+
+        stream
+            .expect_read_request()
+            .once()
+            .returning(move || Ok(HandshakeRequest::new(HashSet::from(peer_methods))));
+
+        stream
+            .expect_write_response()
+            .once()
+            .with(predicate::eq(HandshakeResponse::builder().with_auth_method(agreed_method).build()))
+            .returning(|_| Ok(()));
+
+        let mut peer = LurkPeer::new(stream, addr);
+        let mut authenticator = LurkAuthenticator::new(false);
+        let mut socks5_handler = LurkSocks5ClientHandler::new(&mut peer, &mut authenticator, "127.0.0.1:666".parse().unwrap());
+
+        socks5_handler.process_handshake().await.unwrap();
+        assert_eq!(agreed_method, authenticator.current_method().unwrap());
     }
 }
