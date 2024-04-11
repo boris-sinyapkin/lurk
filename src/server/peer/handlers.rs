@@ -31,7 +31,7 @@ where
     S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
 {
     peer: &'a mut LurkPeer<S>,
-    authenticator: &'a mut LurkAuthenticator,
+    authenticator: LurkAuthenticator,
     server_address: SocketAddr,
 }
 
@@ -40,15 +40,11 @@ where
     S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
     <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(
-        peer: &'a mut LurkPeer<S>,
-        authenticator: &'a mut LurkAuthenticator,
-        server_address: SocketAddr,
-    ) -> LurkSocks5PeerHandler<'a, S> {
+    pub fn new(peer: &'a mut LurkPeer<S>, server_address: SocketAddr) -> LurkSocks5PeerHandler<'a, S> {
         LurkSocks5PeerHandler {
             peer,
-            authenticator,
             server_address,
+            authenticator: LurkAuthenticator::new(),
         }
     }
 
@@ -70,7 +66,7 @@ where
     async fn process_handshake(&mut self) -> Result<()> {
         let request = self.peer.stream.read_request::<HandshakeRequest>().await?;
 
-        LurkSocks5RequestHandler::handle_handshake_request(self.peer, request, self.authenticator).await
+        LurkSocks5RequestHandler::handle_handshake_request(self.peer, request, &mut self.authenticator).await
     }
 
     /// Handling SOCKS5 command which comes in relay request from client.
@@ -220,10 +216,9 @@ mod tests {
             .returning(|_| Ok(()));
 
         let mut peer = LurkPeer::new(stream, addr, LurkPeerType::Socks5Peer);
-        let mut authenticator = LurkAuthenticator::new(false);
-        let mut socks5_handler = LurkSocks5PeerHandler::new(&mut peer, &mut authenticator, "127.0.0.1:666".parse().unwrap());
+        let mut socks5_handler = LurkSocks5PeerHandler::new(&mut peer, "127.0.0.1:666".parse().unwrap());
 
         socks5_handler.process_handshake().await.unwrap();
-        assert_eq!(agreed_method, authenticator.current_method().unwrap());
+        assert_eq!(agreed_method, socks5_handler.authenticator.current_method().unwrap());
     }
 }

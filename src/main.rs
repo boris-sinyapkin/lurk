@@ -17,7 +17,7 @@ async fn main() -> Result<()> {
 
     // Create proxy server instance. It will handle incoming connection in async. fashion.
     let server_addr = SocketAddr::new(IpAddr::V4(config.ipv4()), config.port());
-    let server = LurkServer::new(server_addr, config.auth_enabled());
+    let server = LurkServer::new(server_addr);
 
     // Bind and serve clients "forever"
     server.run().await?;

@@ -29,7 +29,6 @@ Usage: lurk [OPTIONS]
 Options:
   -p, --port <PORT>  TCP port to listen on [default: 1080]
   -i, --ipv4 <IPV4>  IPv4 to listen on [default: 127.0.0.1]
-      --no-auth      Disable authentication of clients
   -h, --help         Print help
   -V, --version      Print version
 ```

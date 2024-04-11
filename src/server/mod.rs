@@ -1,7 +1,7 @@
 use self::peer::handlers::LurkSocks5PeerHandler;
 use crate::{
     io::stream::LurkStreamWrapper,
-    server::peer::{auth::LurkAuthenticator, LurkPeerType, LurkTcpPeer},
+    server::peer::{LurkPeerType, LurkTcpPeer},
 };
 use anyhow::Result;
 use log::{debug, error, info, warn};
@@ -14,18 +14,14 @@ pub mod config;
 
 pub struct LurkServer {
     addr: SocketAddr,
-    auth_enabled: bool,
 }
 
 impl LurkServer {
-    pub fn new(addr: SocketAddr, auth_enabled: bool) -> LurkServer {
-        LurkServer { addr, auth_enabled }
+    pub fn new(addr: SocketAddr) -> LurkServer {
+        LurkServer { addr }
     }
 
     pub async fn run(&self) -> Result<()> {
-        if !self.auth_enabled {
-            warn!("Authentication disabled");
-        }
         let tcp_listener = self.bind().await?;
         loop {
             match tcp_listener.accept().await {
@@ -65,10 +61,7 @@ impl LurkServer {
         let mut peer = LurkTcpPeer::new(stream_wrapper, addr, peer_type);
 
         // Create connection handler and supply handling of new peer in a separate thread.
-        let mut handler = LurkConnectionHandler {
-            server_address: self.addr,
-            authenticator: LurkAuthenticator::new(self.auth_enabled),
-        };
+        let mut handler = LurkConnectionHandler { server_address: self.addr };
 
         tokio::spawn(async move {
             if let Err(err) = handler.handle_peer(&mut peer).await {
@@ -81,14 +74,13 @@ impl LurkServer {
 
 struct LurkConnectionHandler {
     server_address: SocketAddr,
-    authenticator: LurkAuthenticator,
 }
 
 impl LurkConnectionHandler {
     async fn handle_peer(&mut self, peer: &mut LurkTcpPeer) -> Result<()> {
         match peer.peer_type() {
             LurkPeerType::Socks5Peer => {
-                let mut socks5_handler = LurkSocks5PeerHandler::new(peer, &mut self.authenticator, self.server_address);
+                let mut socks5_handler = LurkSocks5PeerHandler::new(peer, self.server_address);
 
                 socks5_handler.handle().await
             }

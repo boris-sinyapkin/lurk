@@ -15,7 +15,7 @@ async fn http_tunnel() {
 
     // Run proxy
     let proxy_future = tokio::spawn(async move {
-        LurkServer::new(lurk_server_addr, false)
+        LurkServer::new(lurk_server_addr)
             .run()
             .await
             .expect("Error during proxy server run")
@@ -30,14 +30,11 @@ async fn http_tunnel() {
         .run()
         .expect("Unable to bind HTTP server");
 
-    http_server.expect(
-        Expectation::matching(matchers::request::method_path("GET", "/hello_world"))
-            .respond_with(responders::status_code(200)),
-    );
+    http_server
+        .expect(Expectation::matching(matchers::request::method_path("GET", "/hello_world")).respond_with(responders::status_code(200)));
 
     // Run HTTP client through Lurk proxy
-    let http_proxy =
-        Proxy::http(format!("socks5://{}", lurk_server_addr)).expect("Unable to supply proxy to HTTP client");
+    let http_proxy = Proxy::http(format!("socks5://{}", lurk_server_addr)).expect("Unable to supply proxy to HTTP client");
     let http_client = ClientBuilder::new()
         .proxy(http_proxy)
         .build()

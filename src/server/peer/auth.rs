@@ -16,15 +16,13 @@ pub struct LurkAuthenticator {
 }
 
 impl LurkAuthenticator {
-    pub fn new(auth_enabled: bool) -> LurkAuthenticator {
-        let available_methods = if !auth_enabled {
-            HashSet::from([LurkAuthMethod::None])
-        } else {
-            HashSet::from([])
-        };
+    // Methods supported by authenticator
+    const SUPPORTED_AUTH_METHODS: [LurkAuthMethod; 1] = [LurkAuthMethod::None];
+
+    pub fn new() -> LurkAuthenticator {
         LurkAuthenticator {
-            available_methods,
             selected_method: None,
+            available_methods: HashSet::from(LurkAuthenticator::SUPPORTED_AUTH_METHODS),
         }
     }
 
@@ -66,17 +64,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn pick_none_auth_method() {
+    fn pick_auth_method() {
         let peer_methods = HashSet::from([LurkAuthMethod::GssAPI, LurkAuthMethod::Password, LurkAuthMethod::None]);
         {
-            let mut authenticator = LurkAuthenticator::new(false);
+            let mut authenticator = LurkAuthenticator::new();
             authenticator.select_auth_method(&peer_methods);
             assert_eq!(Some(LurkAuthMethod::None), authenticator.current_method());
-        }
-        {
-            let mut authenticator = LurkAuthenticator::new(true);
-            authenticator.select_auth_method(&peer_methods);
-            assert_eq!(None, authenticator.current_method());
         }
     }
 }
