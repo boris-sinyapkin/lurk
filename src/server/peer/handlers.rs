@@ -26,7 +26,7 @@ use tokio::{
     net::TcpStream,
 };
 
-pub struct LurkSocks5ClientHandler<'a, S>
+pub struct LurkSocks5PeerHandler<'a, S>
 where
     S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
 {
@@ -35,7 +35,7 @@ where
     server_address: SocketAddr,
 }
 
-impl<'a, S> LurkSocks5ClientHandler<'a, S>
+impl<'a, S> LurkSocks5PeerHandler<'a, S>
 where
     S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
     <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
@@ -44,15 +44,15 @@ where
         peer: &'a mut LurkPeer<S>,
         authenticator: &'a mut LurkAuthenticator,
         server_address: SocketAddr,
-    ) -> LurkSocks5ClientHandler<'a, S> {
-        LurkSocks5ClientHandler {
+    ) -> LurkSocks5PeerHandler<'a, S> {
+        LurkSocks5PeerHandler {
             peer,
             authenticator,
             server_address,
         }
     }
 
-    pub async fn handle_peer(&mut self) -> Result<()> {
+    pub async fn handle(&mut self) -> Result<()> {
         // Complete handshake process and negotiate the authentication method.
         self.process_handshake().await?;
 
@@ -221,7 +221,7 @@ mod tests {
 
         let mut peer = LurkPeer::new(stream, addr, LurkPeerType::Socks5Peer);
         let mut authenticator = LurkAuthenticator::new(false);
-        let mut socks5_handler = LurkSocks5ClientHandler::new(&mut peer, &mut authenticator, "127.0.0.1:666".parse().unwrap());
+        let mut socks5_handler = LurkSocks5PeerHandler::new(&mut peer, &mut authenticator, "127.0.0.1:666".parse().unwrap());
 
         socks5_handler.process_handshake().await.unwrap();
         assert_eq!(agreed_method, authenticator.current_method().unwrap());

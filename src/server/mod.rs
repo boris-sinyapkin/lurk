@@ -1,4 +1,4 @@
-use self::peer::handlers::LurkSocks5ClientHandler;
+use self::peer::handlers::LurkSocks5PeerHandler;
 use crate::{
     io::stream::LurkStreamWrapper,
     server::peer::{auth::LurkAuthenticator, LurkPeerType, LurkTcpPeer},
@@ -47,7 +47,10 @@ impl LurkServer {
 
         // Identify peer type.
         let peer_type = match LurkPeerType::from_tcp_stream(&stream).await {
-            Ok(t) => t,
+            Ok(t) => {
+                debug!("Connected {addr} peer type {t:?}");
+                t
+            }
             Err(err) => {
                 error!(
                     "Failed to identify connected {addr} peer type \
@@ -56,8 +59,6 @@ impl LurkServer {
                 return;
             }
         };
-
-        debug!("Connected {addr} peer type {peer_type:?}");
 
         // Wrap incoming stream and create peer instance.
         let stream_wrapper = LurkStreamWrapper::new(stream);
@@ -87,8 +88,9 @@ impl LurkConnectionHandler {
     async fn handle_peer(&mut self, peer: &mut LurkTcpPeer) -> Result<()> {
         match peer.peer_type() {
             LurkPeerType::Socks5Peer => {
-                let mut socks5_handler = LurkSocks5ClientHandler::new(peer, &mut self.authenticator, self.server_address);
-                socks5_handler.handle_peer().await
+                let mut socks5_handler = LurkSocks5PeerHandler::new(peer, &mut self.authenticator, self.server_address);
+
+                socks5_handler.handle().await
             }
         }
     }
