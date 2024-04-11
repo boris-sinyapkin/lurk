@@ -148,12 +148,13 @@ impl LurkSocks5CommandHandler {
         let peer_address = peer.to_string();
 
         // Resolve endpoint address.
-        debug!("Resolving endpoint address {}", endpoint_address);
-        let endpoint_address = endpoint_address.to_socket_addr().await?;
+        debug!("Resolving endpoint address {} ... ", endpoint_address);
+        let resolved_address = endpoint_address.to_socket_addr().await?;
+        debug!("Resolved endpoint address {} to {}", endpoint_address, resolved_address);
 
         // Establish TCP connection with the endpoint.
         debug!("Establishing TCP connection with the endpoint {} ... ", endpoint_address);
-        let mut r2l = TcpStream::connect(endpoint_address).await.map_err(anyhow::Error::from)?;
+        let mut r2l = TcpStream::connect(resolved_address).await.map_err(anyhow::Error::from)?;
         debug!("TCP connection has been established with the endpoint {}", endpoint_address);
 
         // Respond to relay request with success.
