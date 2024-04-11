@@ -4,7 +4,14 @@
 
 # Lurk
 
-**Lurk** is an async and lightweight SOCKS5 proxy purely written on Rust utilizing [tokio-async](https://tokio.rs) runtime.
+**Lurk** is an async and lightweight implementation of a SOCKS5 proxy, allowing users to establish the connection through intermediate data relaying server. It's entirely built in Rust with [tokio-async](https://tokio.rs) runtime.
+
+## Getting Started
+
+### Prerequisites
+
+- For dev purposes: rust toolchain. Visit [Rust's official page](https://www.rust-lang.org/) for installation details.
+- [Docker](https://www.docker.com) for running out-of-the-box.
 
 ## Build & deploy from GitHub sources
 
