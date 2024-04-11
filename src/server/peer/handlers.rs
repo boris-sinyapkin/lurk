@@ -190,7 +190,9 @@ impl LurkSocks5CommandHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{common::LurkAuthMethod, io::stream::MockLurkStreamWrapper, proto::socks5::response::HandshakeResponse};
+    use crate::{
+        common::LurkAuthMethod, io::stream::MockLurkStreamWrapper, proto::socks5::response::HandshakeResponse, server::peer::LurkPeerType,
+    };
     use mockall::predicate;
     use std::{
         collections::HashSet,
@@ -217,7 +219,7 @@ mod tests {
             .with(predicate::eq(HandshakeResponse::builder().with_auth_method(agreed_method).build()))
             .returning(|_| Ok(()));
 
-        let mut peer = LurkPeer::new(stream, addr);
+        let mut peer = LurkPeer::new(stream, addr, LurkPeerType::Socks5Peer);
         let mut authenticator = LurkAuthenticator::new(false);
         let mut socks5_handler = LurkSocks5ClientHandler::new(&mut peer, &mut authenticator, "127.0.0.1:666".parse().unwrap());
 
