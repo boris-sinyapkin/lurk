@@ -16,7 +16,7 @@ use crate::{
 };
 use anyhow::{bail, Error, Result};
 use human_bytes::human_bytes;
-use log::{debug, error, info};
+use log::{debug, error, info, trace};
 use std::{
     net::SocketAddr,
     ops::{Deref, DerefMut},
@@ -131,7 +131,7 @@ impl LurkSocks5RequestHandler {
         let error_string = err.to_string();
         let response = RelayResponse::builder().with_err(err).with_bound_address(server_address).build();
 
-        debug!("Error: '{}'. Response: '{:?}' to {}", error_string, response, peer);
+        error!("Error: '{}'. Response: '{:?}' to {}", error_string, response, peer);
         peer.stream.write_response(response).await
     }
 }
@@ -148,14 +148,18 @@ impl LurkSocks5CommandHandler {
         let peer_address = peer.to_string();
 
         // Resolve endpoint address.
-        debug!("Resolving endpoint address {} ... ", endpoint_address);
+        trace!("Endpoint address {} resolution: ... ", endpoint_address);
         let resolved_address = endpoint_address.to_socket_addr().await?;
-        debug!("Resolved endpoint address {} to {}", endpoint_address, resolved_address);
+        trace!(
+            "Endpoint address {} resolution: SUCCESS with {}",
+            endpoint_address,
+            resolved_address
+        );
 
         // Establish TCP connection with the endpoint.
-        debug!("Establishing TCP connection with the endpoint {} ... ", endpoint_address);
+        debug!("TCP connection establishment with the endpoint {}: ... ", endpoint_address);
         let mut r2l = TcpStream::connect(resolved_address).await.map_err(anyhow::Error::from)?;
-        debug!("TCP connection has been established with the endpoint {}", endpoint_address);
+        debug!("TCP connection establishment with the endpoint {}: SUCCESS", endpoint_address);
 
         // Respond to relay request with success.
         let response = RelayResponse::builder().with_success().with_bound_address(server_address).build();
