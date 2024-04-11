@@ -11,7 +11,7 @@ use tokio::{
     net::TcpStream,
 };
 
-pub mod auth;
+mod auth;
 pub mod handlers;
 
 pub type LurkTcpPeer = LurkPeer<LurkStreamWrapper<TcpStream>>;
