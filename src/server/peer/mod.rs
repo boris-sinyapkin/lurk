@@ -40,6 +40,14 @@ impl LurkPeerType {
     }
 }
 
+impl Display for LurkPeerType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LurkPeerType::Socks5Peer => write!(f, "SOCKS5"),
+        }
+    }
+}
+
 pub struct LurkPeer<S>
 where
     S: LurkRequestRead + LurkResponseWrite + Unpin,

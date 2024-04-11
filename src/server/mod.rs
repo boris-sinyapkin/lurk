@@ -44,7 +44,7 @@ impl LurkServer {
         // Identify peer type.
         let peer_type = match LurkPeerType::from_tcp_stream(&stream).await {
             Ok(t) => {
-                debug!("Connected {addr} peer type {t:?}");
+                debug!("Connected {addr} peer type {t}");
                 t
             }
             Err(err) => {
