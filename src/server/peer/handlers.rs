@@ -26,10 +26,10 @@ use tokio::{
     net::TcpStream,
 };
 
-pub struct LurkRequestHandler {}
+pub struct LurkSocks5RequestHandler {}
 
-impl LurkRequestHandler {
-    pub async fn handle_socks5_handshake_request<S>(
+impl LurkSocks5RequestHandler {
+    pub async fn handle_handshake_request<S>(
         peer: &mut LurkPeer<S>,
         request: HandshakeRequest,
         authenticator: &mut LurkAuthenticator,
@@ -54,20 +54,20 @@ impl LurkRequestHandler {
         peer.stream.write_response(response_builder.build()).await
     }
 
-    pub async fn handle_socks5_relay_request<S>(peer: &mut LurkPeer<S>, request: RelayRequest, server_address: SocketAddr) -> Result<()>
+    pub async fn handle_relay_request<S>(peer: &mut LurkPeer<S>, request: RelayRequest, server_address: SocketAddr) -> Result<()>
     where
         S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
         <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
     {
         // Handle SOCKS5 command that encapsulated in relay request data.
         let result = match request.command() {
-            Command::Connect => LurkCommandHandler::handle_socks5_connect(peer, server_address, request.endpoint_address()).await,
+            Command::Connect => LurkSocks5CommandHandler::handle_connect(peer, server_address, request.endpoint_address()).await,
             cmd => unsupported!(Unsupported::Socks5Command(cmd)),
         };
 
         // If error occured, handle it with respond to processing relay request.
         if let Err(err) = result {
-            LurkRequestHandler::handle_error_with_response(peer, server_address, err).await?;
+            LurkSocks5RequestHandler::handle_error_with_response(peer, server_address, err).await?;
         }
 
         Ok(())
@@ -85,10 +85,10 @@ impl LurkRequestHandler {
     }
 }
 
-struct LurkCommandHandler {}
+struct LurkSocks5CommandHandler {}
 
-impl LurkCommandHandler {
-    pub async fn handle_socks5_connect<S>(peer: &mut LurkPeer<S>, server_address: SocketAddr, endpoint_address: &Address) -> Result<()>
+impl LurkSocks5CommandHandler {
+    pub async fn handle_connect<S>(peer: &mut LurkPeer<S>, server_address: SocketAddr, endpoint_address: &Address) -> Result<()>
     where
         S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
         <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,

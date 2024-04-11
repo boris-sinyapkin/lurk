@@ -1,4 +1,4 @@
-use self::{auth::LurkAuthenticator, handlers::LurkRequestHandler};
+use self::{auth::LurkAuthenticator, handlers::LurkSocks5RequestHandler};
 use crate::{
     io::{stream::LurkStreamWrapper, LurkRequestRead, LurkResponseWrite},
     proto::socks5::request::{HandshakeRequest, RelayRequest},
@@ -42,14 +42,14 @@ where
     pub async fn process_socks5_handshake(&mut self, authenticator: &mut LurkAuthenticator) -> Result<()> {
         let request = self.stream.read_request::<HandshakeRequest>().await?;
 
-        LurkRequestHandler::handle_socks5_handshake_request(self, request, authenticator).await
+        LurkSocks5RequestHandler::handle_handshake_request(self, request, authenticator).await
     }
 
     /// Handling SOCKS5 command which comes in relay request from client.
     pub async fn process_socks5_command(&mut self, server_address: SocketAddr) -> Result<()> {
         let request = self.stream.read_request::<RelayRequest>().await?;
 
-        LurkRequestHandler::handle_socks5_relay_request(self, request, server_address).await
+        LurkSocks5RequestHandler::handle_relay_request(self, request, server_address).await
     }
 }
 
