@@ -59,15 +59,9 @@ impl LurkRequestHandler {
         S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
         <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
     {
-        let mut command_handler = LurkCommandHandler::new(peer);
-
         // Handle SOCKS5 command that encapsulated in relay request data.
         let result = match request.command() {
-            Command::Connect => {
-                command_handler
-                    .handle_socks5_connect(server_address, request.endpoint_address())
-                    .await
-            }
+            Command::Connect => LurkCommandHandler::handle_socks5_connect(peer, server_address, request.endpoint_address()).await,
             cmd => unsupported!(Unsupported::Socks5Command(cmd)),
         };
 
@@ -91,25 +85,16 @@ impl LurkRequestHandler {
     }
 }
 
-struct LurkCommandHandler<'a, S>
-where
-    S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
-{
-    peer: &'a mut LurkPeer<S>,
-}
+struct LurkCommandHandler {}
 
-impl<'a, S> LurkCommandHandler<'a, S>
-where
-    S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
-    <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
-{
-    pub fn new(peer: &'a mut LurkPeer<S>) -> LurkCommandHandler<'a, S> {
-        LurkCommandHandler { peer }
-    }
-
-    pub async fn handle_socks5_connect(&mut self, server_address: SocketAddr, endpoint_address: &Address) -> Result<()> {
-        info!("Handling SOCKS5 CONNECT from {}", self.peer);
-        let peer_address = self.peer.to_string();
+impl LurkCommandHandler {
+    pub async fn handle_socks5_connect<S>(peer: &mut LurkPeer<S>, server_address: SocketAddr, endpoint_address: &Address) -> Result<()>
+    where
+        S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
+        <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
+    {
+        info!("Handling SOCKS5 CONNECT from {}", peer);
+        let peer_address = peer.to_string();
 
         // Resolve endpoint address.
         debug!("Resolving endpoint address {}", endpoint_address);
@@ -122,9 +107,9 @@ where
 
         // Respond to relay request with success.
         let response = RelayResponse::builder().with_success().with_bound_address(server_address).build();
-        self.peer.stream.write_response(response).await?;
+        peer.stream.write_response(response).await?;
 
-        let mut l2r = &mut *self.peer.stream;
+        let mut l2r = &mut *peer.stream;
 
         // Create proxy tunnel which operates with the following TCP streams:
         // - L2R: client   <--> proxy
