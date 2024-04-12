@@ -12,7 +12,7 @@ use crate::{
         Command,
     },
 };
-use anyhow::{bail, Error, Result};
+use anyhow::{bail, Result};
 use human_bytes::human_bytes;
 use log::{debug, error, info, trace};
 use std::{
@@ -64,14 +64,29 @@ where
     async fn process_handshake(&mut self) -> Result<()> {
         let request = self.peer.stream.read_request::<HandshakeRequest>().await?;
 
-        LurkSocks5RequestHandler::handle_handshake_request(self.peer, request, &mut self.authenticator).await
+        if let Err(err) = LurkSocks5RequestHandler::handle_handshake_request(self.peer, &request, &mut self.authenticator).await {
+            log_request_handling_error!(self.peer, err, request, ());
+        }
+
+        Ok(())
     }
 
     /// Handling SOCKS5 command which comes in relay request from client.
     async fn process_command(&mut self) -> Result<()> {
         let request = self.peer.stream.read_request::<RelayRequest>().await?;
 
-        LurkSocks5RequestHandler::handle_relay_request(self.peer, request, self.server_address).await
+        if let Err(err) = LurkSocks5RequestHandler::handle_relay_request(self.peer, &request, self.server_address).await {
+            let error_string = err.to_string();
+            let response = RelayResponse::builder()
+                .with_err(err)
+                .with_bound_address(self.server_address)
+                .build();
+
+            log_request_handling_error!(self.peer, error_string, request, response);
+            self.peer.stream.write_response(response).await?
+        }
+
+        Ok(())
     }
 }
 
@@ -80,7 +95,7 @@ struct LurkSocks5RequestHandler {}
 impl LurkSocks5RequestHandler {
     pub async fn handle_handshake_request<S>(
         peer: &mut LurkPeer<S>,
-        request: HandshakeRequest,
+        request: &HandshakeRequest,
         authenticator: &mut LurkAuthenticator,
     ) -> Result<()>
     where
@@ -103,39 +118,16 @@ impl LurkSocks5RequestHandler {
         peer.stream.write_response(response_builder.build()).await
     }
 
-    pub async fn handle_relay_request<S>(peer: &mut LurkPeer<S>, request: RelayRequest, server_address: SocketAddr) -> Result<()>
+    pub async fn handle_relay_request<S>(peer: &mut LurkPeer<S>, request: &RelayRequest, server_address: SocketAddr) -> Result<()>
     where
         S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
         <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
     {
         // Handle SOCKS5 command that encapsulated in relay request data.
-        let result = match request.command() {
+        match request.command() {
             Command::Connect => LurkSocks5CommandHandler::handle_connect(peer, server_address, request.endpoint_address()).await,
             cmd => unsupported!(Unsupported::Socks5Command(cmd)),
-        };
-
-        // If error occured, handle it with respond to processing relay request.
-        if let Err(err) = result {
-            LurkSocks5RequestHandler::handle_error_with_response(peer, server_address, request, err).await?;
         }
-
-        Ok(())
-    }
-
-    async fn handle_error_with_response<S>(
-        peer: &mut LurkPeer<S>,
-        server_address: SocketAddr,
-        request: RelayRequest,
-        err: Error,
-    ) -> Result<()>
-    where
-        S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
-    {
-        let error_string = err.to_string();
-        let response = RelayResponse::builder().with_err(err).with_bound_address(server_address).build();
-
-        log_request_handling_error!(peer, error_string, request, response);
-        peer.stream.write_response(response).await
     }
 }
 
