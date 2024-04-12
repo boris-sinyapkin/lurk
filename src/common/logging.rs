@@ -45,9 +45,9 @@ pub(crate) use log_tunnel_created;
 macro_rules! log_request_handling_error {
     ($peer:expr, $err:expr, $req:expr, $resp:expr) => {
         error!(
-            "\n\n\tError occured during request handling \
+            "\n\n\tError occured during REQUEST handling: \
             \n\t\tpeer: '{}' \
-            \n\t\terror: '{}' \
+            \n\t\treason: '{}' \
             \n\t\trequest : '{:?}' \
             \n\t\tresponse: '{:?}' \
             \n",
@@ -56,4 +56,23 @@ macro_rules! log_request_handling_error {
     };
 }
 
+macro_rules! log_closed_conn_with_error {
+    ($peer:expr, $err:expr) => {
+        error!(
+            "\n\n\tConnection with {} has been CLOSED with ERROR: \
+            \n\t\treason: '{}' \
+            \n",
+            $peer, $err
+        )
+    };
+}
+
+macro_rules! log_closed_conn {
+    ($peer:expr) => {
+        info!("\n\n\tConnection with {} has been CLOSED\n", $peer)
+    };
+}
+
+pub(crate) use log_closed_conn;
+pub(crate) use log_closed_conn_with_error;
 pub(crate) use log_request_handling_error;

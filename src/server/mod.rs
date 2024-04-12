@@ -1,5 +1,6 @@
 use self::peer::handlers::LurkSocks5PeerHandler;
 use crate::{
+    common::logging::{log_closed_conn, log_closed_conn_with_error},
     io::stream::LurkStreamWrapper,
     server::peer::{LurkPeerType, LurkTcpPeer},
 };
@@ -65,9 +66,10 @@ impl LurkServer {
 
         tokio::spawn(async move {
             if let Err(err) = handler.handle_peer(&mut peer).await {
-                error!("Error occured during handling of {}, {}", addr, err);
+                log_closed_conn_with_error!(peer, err);
+            } else {
+                log_closed_conn!(peer);
             }
-            info!("Connection with {} has been finished", peer);
         });
     }
 }
