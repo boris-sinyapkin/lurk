@@ -2,7 +2,7 @@ use super::{auth::LurkAuthenticator, LurkPeer};
 use crate::{
     common::{
         error::{unsupported, LurkError, Unsupported},
-        logging::{log_tunnel_closed, log_tunnel_closed_with_error, log_tunnel_created},
+        logging::{log_request_handling_error, log_tunnel_closed, log_tunnel_closed_with_error, log_tunnel_created},
         net::Address,
     },
     io::{tunnel::LurkTunnel, LurkRequestRead, LurkResponseWrite},
@@ -116,20 +116,25 @@ impl LurkSocks5RequestHandler {
 
         // If error occured, handle it with respond to processing relay request.
         if let Err(err) = result {
-            LurkSocks5RequestHandler::handle_error_with_response(peer, server_address, err).await?;
+            LurkSocks5RequestHandler::handle_error_with_response(peer, server_address, request, err).await?;
         }
 
         Ok(())
     }
 
-    async fn handle_error_with_response<S>(peer: &mut LurkPeer<S>, server_address: SocketAddr, err: Error) -> Result<()>
+    async fn handle_error_with_response<S>(
+        peer: &mut LurkPeer<S>,
+        server_address: SocketAddr,
+        request: RelayRequest,
+        err: Error,
+    ) -> Result<()>
     where
         S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
     {
         let error_string = err.to_string();
         let response = RelayResponse::builder().with_err(err).with_bound_address(server_address).build();
 
-        error!("Error: '{}'. Response: '{:?}' to {}", error_string, response, peer);
+        log_request_handling_error!(peer, error_string, request, response);
         peer.stream.write_response(response).await
     }
 }

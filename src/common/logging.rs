@@ -1,3 +1,5 @@
+// Tunnel
+
 macro_rules! log_tunnel_created {
     ($peer:expr, $proxy:expr, $endpoint:expr) => {
         info!(
@@ -37,3 +39,21 @@ macro_rules! log_tunnel_closed_with_error {
 pub(crate) use log_tunnel_closed;
 pub(crate) use log_tunnel_closed_with_error;
 pub(crate) use log_tunnel_created;
+
+// Error handling
+
+macro_rules! log_request_handling_error {
+    ($peer:expr, $err:expr, $req:expr, $resp:expr) => {
+        error!(
+            "\n\n\tError occured during request handling \
+            \n\t\tpeer: '{}' \
+            \n\t\terror: '{}' \
+            \n\t\trequest : '{:?}' \
+            \n\t\tresponse: '{:?}' \
+            \n",
+            $peer, $err, $req, $resp
+        )
+    };
+}
+
+pub(crate) use log_request_handling_error;
