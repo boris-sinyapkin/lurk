@@ -108,10 +108,10 @@ impl LurkSocks5RequestHandler {
         let mut response_builder = HandshakeResponse::builder();
         if let Some(method) = authenticator.current_method() {
             response_builder.with_auth_method(method);
-            info!("Selected authentication method {:?} for {}", method, peer);
+            debug!("Selected authentication method {:?} for {}", method, peer);
         } else {
             response_builder.with_no_acceptable_method();
-            info!("No acceptable methods identified for for {}", peer);
+            debug!("No acceptable methods identified for for {}", peer);
         }
 
         // Communicate selected authentication method to the client.
@@ -139,7 +139,7 @@ impl LurkSocks5CommandHandler {
         S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
         <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
     {
-        info!("Handling SOCKS5 CONNECT from {}", peer);
+        debug!("Handling SOCKS5 CONNECT from {}", peer);
         let peer_address = peer.to_string();
 
         // Resolve endpoint address.
