@@ -1,4 +1,5 @@
 pub mod error;
+pub mod logging;
 pub mod net;
 
 #[repr(u8)]

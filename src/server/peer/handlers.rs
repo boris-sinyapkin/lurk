@@ -2,12 +2,10 @@ use super::{auth::LurkAuthenticator, LurkPeer};
 use crate::{
     common::{
         error::{unsupported, LurkError, Unsupported},
+        logging::{log_tunnel_closed, log_tunnel_closed_with_error, log_tunnel_created},
         net::Address,
     },
-    io::{
-        tunnel::{log_tunnel_closed, log_tunnel_closed_with_error, log_tunnel_created, LurkTunnel},
-        LurkRequestRead, LurkResponseWrite,
-    },
+    io::{tunnel::LurkTunnel, LurkRequestRead, LurkResponseWrite},
     proto::socks5::{
         request::{HandshakeRequest, RelayRequest},
         response::{HandshakeResponse, RelayResponse},
