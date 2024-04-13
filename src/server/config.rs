@@ -1,7 +1,7 @@
 use clap::Parser;
 use std::net::Ipv4Addr;
 
-pub const LOG4RS_CONFIG_FILE_PATH: &str = "log/log4rs.yaml";
+pub const LOG4RS_CONFIG_FILE_PATH: &str = "log4rs.yaml";
 
 #[derive(Default, Parser, Debug)]
 #[clap(author = "Boris S. <boris.works@hotmail.com>", about = "Fast and fancy SOCKS5 proxy", version)]
