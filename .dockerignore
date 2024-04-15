@@ -1,0 +1,9 @@
+**/.dockerignore
+**/.github
+**/.gitignore
+**/.vscode
+**/target
+**/Dockerfile
+**/tests
+**/rustfmt.toml
+README.md
