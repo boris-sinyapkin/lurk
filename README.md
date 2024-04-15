@@ -13,6 +13,16 @@
 - For dev purposes: rust toolchain. Visit [Rust's official page](https://www.rust-lang.org/) for installation details.
 - [Docker](https://www.docker.com) for running out-of-the-box.
 
+## Run Docker container
+
+Lurk proxy could be deployed by using docker image stored in GitHub Package's.
+
+Publish port to default 1080 and start listening incoming connections:
+
+```bash
+docker run -p 1080:1080/tcp ghcr.io/boris-sinyapkin/lurk:dev
+```
+
 ## Build & deploy from GitHub sources
 
 Project could be compiled directly from sources:
