@@ -11,7 +11,7 @@ pub struct LurkConfig {
     port: u16,
 
     /// IPv4 to listen on
-    #[clap(short, long, default_value = "127.0.0.1")]
+    #[clap(short, long, default_value = "0.0.0.0")]
     ipv4: Option<Ipv4Addr>,
 }
 
