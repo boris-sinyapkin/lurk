@@ -21,7 +21,7 @@ Lurk proxy could be deployed by using docker image stored in GitHub Package's.
 Publish port to default 1080 and start listening incoming connections:
 
 ```bash
-docker run -p 1080:1080/tcp ghcr.io/boris-sinyapkin/lurk:dev
+docker run -p 1080:1080/tcp ghcr.io/boris-sinyapkin/lurk:latest
 ```
 
 ## Build & deploy from GitHub sources
