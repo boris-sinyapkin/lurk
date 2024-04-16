@@ -1,8 +1,9 @@
 
+# Lurk
+
 ![Build & Test](https://github.com/boris-sinyapkin/lurk/actions/workflows/build-and-test.yaml/badge.svg?branch=dev)
 
-
-# Lurk
+## Overview
 
 **Lurk** is an async and lightweight implementation of a SOCKS5 proxy, allowing users to establish the connection through intermediate data relaying server. It's entirely built in Rust with [tokio-async](https://tokio.rs) runtime.
 
@@ -26,6 +27,7 @@ docker run -p 1080:1080/tcp ghcr.io/boris-sinyapkin/lurk:dev
 ## Build & deploy from GitHub sources
 
 Project could be compiled directly from sources:
+
 ```bash
 git clone git@github.com:boris-sinyapkin/lurk.git
 cd lurk
@@ -33,11 +35,13 @@ cargo build --release
 ```
 
 If you want to install binary to the /bin directory, run the following command from cloned repository:
+
 ```bash
 cargo install --path .
 ```
 
 By default, **Lurk** is listening on conventionally defined 1080 port (see [RFC 1928](https://datatracker.ietf.org/doc/html/rfc1928)):
+
 ```bash
 Fast and fancy SOCKS5 proxy
 
@@ -51,10 +55,13 @@ Options:
 ```
 
 If default settings is acceptable, execute installed binary:
+
 ```bash
 lurk
 ```
+
 Either deploy server through **cargo**:
+
 ```bash
 cargo run --release
 ```
