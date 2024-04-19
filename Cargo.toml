@@ -12,6 +12,8 @@ pretty_assertions = { version = "1.4.0" }
 reqwest = { version = "0.12.2", features = ["socks"] }
 tokio-test = { version = "0.4.4" }
 mockall = { version = "0.12.1" }
+async-socks5 = { version = "0.6.0" }
+rand = { version = "0.8.5" }
 
 [dependencies]
 anyhow = { version = "1.0.81" }

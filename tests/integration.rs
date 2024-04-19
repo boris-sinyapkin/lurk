@@ -1,28 +1,21 @@
-use httptest::{matchers, responders, Expectation, ServerBuilder};
-use lurk::server::LurkServer;
+use futures::{stream::FuturesUnordered, StreamExt};
+use httptest::{matchers::request::method_path, responders::status_code, Expectation, ServerBuilder};
+use log::info;
 use pretty_assertions::assert_eq;
-use reqwest::{ClientBuilder, Proxy};
+use reqwest::ClientBuilder;
 use std::{net::SocketAddr, thread::sleep, time::Duration};
 
 mod common;
 
 #[tokio::test]
-async fn http_tunnel() {
+async fn http_server_single_client() {
     common::init_logging();
 
     let lurk_server_addr = "127.0.0.1:32001".parse::<SocketAddr>().unwrap();
     let http_server_addr = "127.0.0.1:32002".parse::<SocketAddr>().unwrap();
 
     // Run proxy
-    let proxy_future = tokio::spawn(async move {
-        LurkServer::new(lurk_server_addr)
-            .run()
-            .await
-            .expect("Error during proxy server run")
-    });
-
-    // Yeild execution untill server binds
-    tokio::task::yield_now().await;
+    let lurk_handle = common::spawn_lurk_server(lurk_server_addr).await;
 
     // Run HTTP server in the background
     let http_server = ServerBuilder::new()
@@ -30,13 +23,11 @@ async fn http_tunnel() {
         .run()
         .expect("Unable to bind HTTP server");
 
-    http_server
-        .expect(Expectation::matching(matchers::request::method_path("GET", "/hello_world")).respond_with(responders::status_code(200)));
+    http_server.expect(Expectation::matching(method_path("GET", "/hello_world")).respond_with(status_code(200)));
 
     // Run HTTP client through Lurk proxy
-    let http_proxy = Proxy::http(format!("socks5://{}", lurk_server_addr)).expect("Unable to supply proxy to HTTP client");
     let http_client = ClientBuilder::new()
-        .proxy(http_proxy)
+        .proxy(common::socks5_proxy(lurk_server_addr))
         .build()
         .expect("Unable to build HTTP client through supplied proxy");
 
@@ -49,6 +40,43 @@ async fn http_tunnel() {
 
     assert_eq!(200, response.status());
 
-    proxy_future.abort();
+    lurk_handle.abort();
+    sleep(Duration::from_millis(1000));
+}
+
+#[tokio::test]
+async fn echo_server_multiple_clients() {
+    common::init_logging();
+
+    let num_clients = 1000;
+    let generated_data_len = 1024;
+    let lurk_server_addr = "127.0.0.1:32001".parse::<SocketAddr>().unwrap();
+    let echo_server_addr = "127.0.0.1:32003".parse::<SocketAddr>().unwrap();
+
+    // Run Lurk proxy.
+    let lurk_handle = common::spawn_lurk_server(lurk_server_addr).await;
+
+    // Run echo server. Data sent to this server will be proxied through Lurk
+    // instance spawned above.
+    let echo_handle = common::spawn_echo_server(echo_server_addr).await;
+
+    // Spawn clients and "ping-pong" data through lurk proxy.
+    let mut client_tasks: FuturesUnordered<_> = (0..num_clients)
+        .map(|i| {
+            tokio::spawn(async move {
+                info!("Started client #{i:}");
+                common::ping_pong_data_through_socks5(echo_server_addr, lurk_server_addr, generated_data_len).await;
+                info!("Finished client #{i:}");
+            })
+        })
+        .collect();
+
+    // Await all clients to complete.
+    while client_tasks.next().await.is_some() {}
+
+    // Shutdown listeners.
+    echo_handle.abort();
+    lurk_handle.abort();
+
     sleep(Duration::from_millis(1000));
 }
