@@ -18,7 +18,7 @@ pub type LurkTcpPeer = LurkPeer<LurkStreamWrapper<TcpStream>>;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LurkPeerType {
-    Socks5Peer = 0x05,
+    SOCKS5 = 0x05,
 }
 
 impl LurkPeerType {
@@ -31,7 +31,7 @@ impl LurkPeerType {
 
         if peeked_bytes == 1 {
             match buff[0] {
-                0x05 => Ok(LurkPeerType::Socks5Peer),
+                0x05 => Ok(LurkPeerType::SOCKS5),
                 t => bail!(Error::msg(format!("Unknown peer type {t:#04x}"))),
             }
         } else {
@@ -43,7 +43,7 @@ impl LurkPeerType {
 impl Display for LurkPeerType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            LurkPeerType::Socks5Peer => write!(f, "SOCKS5"),
+            LurkPeerType::SOCKS5 => write!(f, "SOCKS5"),
         }
     }
 }
