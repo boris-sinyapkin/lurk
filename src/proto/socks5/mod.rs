@@ -72,9 +72,9 @@ impl LurkAuthMethod {
 #[rustfmt::skip]
 #[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
 pub enum Command {
-    Connect,
-    Bind,
-    UdpAssociate
+    TCPConnect,
+    TCPBind,
+    UDPAssociate
 }
 
 impl TryFrom<u8> for Command {
@@ -83,9 +83,9 @@ impl TryFrom<u8> for Command {
     fn try_from(value: u8) -> Result<Self, Self::Error> {
         use consts::command::*;
         match value {
-            SOCKS5_CMD_BIND => Ok(Command::Bind),
-            SOCKS5_CMD_CONNECT => Ok(Command::Connect),
-            SOCKS5_CMD_UDP_ASSOCIATE => Ok(Command::UdpAssociate),
+            SOCKS5_CMD_BIND => Ok(Command::TCPBind),
+            SOCKS5_CMD_CONNECT => Ok(Command::TCPConnect),
+            SOCKS5_CMD_UDP_ASSOCIATE => Ok(Command::UDPAssociate),
             _ => Err(LurkError::DataError(InvalidValue::SocksCommand(value))),
         }
     }

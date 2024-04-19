@@ -125,7 +125,7 @@ impl LurkSocks5RequestHandler {
     {
         // Handle SOCKS5 command that encapsulated in relay request data.
         match request.command() {
-            Command::Connect => LurkSocks5CommandHandler::handle_connect(peer, server_address, request.endpoint_address()).await,
+            Command::TCPConnect => LurkSocks5CommandHandler::handle_connect(peer, server_address, request.endpoint_address()).await,
             cmd => unsupported!(Unsupported::Socks5Command(cmd)),
         }
     }
