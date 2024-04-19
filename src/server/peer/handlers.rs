@@ -215,7 +215,7 @@ mod tests {
             .with(predicate::eq(HandshakeResponse::builder().with_auth_method(agreed_method).build()))
             .returning(|_| Ok(()));
 
-        let mut peer = LurkPeer::new(stream, addr, LurkPeerType::Socks5Peer);
+        let mut peer = LurkPeer::new(stream, addr, LurkPeerType::SOCKS5);
         let mut socks5_handler = LurkSocks5PeerHandler::new(&mut peer, "127.0.0.1:666".parse().unwrap());
 
         socks5_handler.process_handshake().await.unwrap();

@@ -81,7 +81,7 @@ struct LurkConnectionHandler {
 impl LurkConnectionHandler {
     async fn handle_peer(&mut self, peer: &mut LurkTcpPeer) -> Result<()> {
         match peer.peer_type() {
-            LurkPeerType::Socks5Peer => {
+            LurkPeerType::SOCKS5 => {
                 let mut socks5_handler = LurkSocks5PeerHandler::new(peer, self.server_address);
 
                 socks5_handler.handle().await
