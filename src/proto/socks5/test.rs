@@ -100,7 +100,7 @@ async fn rw_relay_messages() {
         .await
         .expect("Relay request should be parsed");
 
-    assert_eq!(Command::Connect, request.command());
+    assert_eq!(Command::TCPConnect, request.command());
     assert_eq!(
         &ipv4_socket_address!(Ipv4Addr::new(127, 0, 0, 1), 2570),
         request.endpoint_address(),
@@ -158,7 +158,7 @@ fn error_to_relay_status_cast() {
     let dummy_invalid_value_err = InvalidValue::AuthMethod(0xff);
     let dummy_utf8_err = String::from_utf8(vec![0xF1]).unwrap_err();
 
-    assert_eq!(ReplyStatus::CommandNotSupported,     anyhow!(LurkError::Unsupported(Unsupported::Socks5Command(Command::Bind))).into());
+    assert_eq!(ReplyStatus::CommandNotSupported,     anyhow!(LurkError::Unsupported(Unsupported::Socks5Command(Command::TCPBind))).into());
     assert_eq!(ReplyStatus::GeneralFailure,          anyhow!(LurkError::DataError(dummy_invalid_value_err)).into());
     assert_eq!(ReplyStatus::GeneralFailure,          anyhow!(LurkError::DomainNameDecodingFailed(dummy_utf8_err)).into());
     assert_eq!(ReplyStatus::ConnectionRefused,       anyhow!(io::Error::from(io::ErrorKind::ConnectionRefused)).into());
