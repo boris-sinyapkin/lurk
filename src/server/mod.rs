@@ -1,6 +1,6 @@
 use self::peer::handlers::LurkSocks5PeerHandler;
 use crate::{
-    common::logging::{log_closed_conn, log_closed_conn_with_error},
+    common::logging::{log_closed_tcp_conn, log_closed_tcp_conn_with_error, log_opened_tcp_conn},
     io::stream::LurkStreamWrapper,
     server::peer::{LurkPeerType, LurkTcpPeer},
 };
@@ -26,7 +26,10 @@ impl LurkServer {
         let tcp_listener = self.bind().await?;
         loop {
             match tcp_listener.accept().await {
-                Ok((stream, addr)) => self.on_new_peer_connected(stream, addr).await,
+                Ok((stream, addr)) => {
+                    log_opened_tcp_conn!(addr);
+                    self.on_new_peer_connected(stream, addr).await
+                }
                 Err(err) => warn!("Error while accepting the TCP connection: {}", err),
             }
         }
@@ -40,8 +43,6 @@ impl LurkServer {
     }
 
     async fn on_new_peer_connected(&self, stream: TcpStream, addr: SocketAddr) {
-        info!("New connection has been established from {}", addr);
-
         // Identify peer type.
         let peer_type = match LurkPeerType::from_tcp_stream(&stream).await {
             Ok(t) => {
@@ -66,9 +67,9 @@ impl LurkServer {
 
         tokio::spawn(async move {
             if let Err(err) = handler.handle_peer(&mut peer).await {
-                log_closed_conn_with_error!(peer, err);
+                log_closed_tcp_conn_with_error!(peer, err);
             } else {
-                log_closed_conn!(peer);
+                log_closed_tcp_conn!(peer);
             }
         });
     }
