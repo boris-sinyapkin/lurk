@@ -41,6 +41,7 @@ async fn http_server_single_client() {
     assert_eq!(200, response.status());
 
     lurk_handle.abort();
+    drop(http_server);
     sleep(Duration::from_millis(1000));
 }
 
@@ -48,10 +49,10 @@ async fn http_server_single_client() {
 async fn echo_server_multiple_clients() {
     common::init_logging();
 
-    let num_clients = 2;
-    let generated_data_len = 128;
-    let lurk_server_addr = "127.0.0.1:32001".parse::<SocketAddr>().unwrap();
-    let echo_server_addr = "127.0.0.1:32003".parse::<SocketAddr>().unwrap();
+    let num_clients = 100;
+    let generated_data_len = 1024;
+    let lurk_server_addr = "127.0.0.1:32003".parse::<SocketAddr>().unwrap();
+    let echo_server_addr = "127.0.0.1:32004".parse::<SocketAddr>().unwrap();
 
     // Run Lurk proxy.
     let lurk_handle = common::spawn_lurk_server(lurk_server_addr).await;

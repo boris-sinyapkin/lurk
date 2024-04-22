@@ -1,25 +1,18 @@
 use crate::proto::socks5::Command;
 use thiserror::Error;
 
-/// Bails out with unsupported error
-macro_rules! unsupported {
-    ($x:expr) => {
-        bail!(LurkError::Unsupported($x))
-    };
-}
-
-pub(crate) use unsupported;
-
 #[derive(Error, Debug, PartialEq)]
 pub enum LurkError {
     #[error("data has incorrect / corrupted field: {0}")]
     DataError(InvalidValue),
     #[error("failed UTF-8 decoding of domain name: {0}")]
     DomainNameDecodingFailed(std::string::FromUtf8Error),
-    #[error("{0} is not supported")]
-    Unsupported(Unsupported),
+    #[error("SOCKS command {0:?} is not supported")]
+    UnsupportedSocksCommand(Command),
     #[error("unable to resolve domain name {0}")]
     UnresolvedDomainName(String),
+    #[error("unable to select appropriate authentication method")]
+    NoAcceptableAuthMethod
 }
 
 #[derive(Error, Debug, PartialEq)]
@@ -34,10 +27,4 @@ pub enum InvalidValue {
     AuthMethod(u8),
     #[error("invalid SOCKS command {0:#02x}")]
     SocksCommand(u8),
-}
-
-#[derive(Error, Debug, PartialEq)]
-pub enum Unsupported {
-    #[error("{0:?} SOCKS5 command")]
-    Socks5Command(Command),
 }
