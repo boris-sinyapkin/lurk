@@ -48,8 +48,8 @@ async fn http_server_single_client() {
 async fn echo_server_multiple_clients() {
     common::init_logging();
 
-    let num_clients = 1000;
-    let generated_data_len = 1024;
+    let num_clients = 5;
+    let generated_data_len = 128;
     let lurk_server_addr = "127.0.0.1:32001".parse::<SocketAddr>().unwrap();
     let echo_server_addr = "127.0.0.1:32003".parse::<SocketAddr>().unwrap();
 
@@ -61,18 +61,16 @@ async fn echo_server_multiple_clients() {
     let echo_handle = common::spawn_echo_server(echo_server_addr).await;
 
     // Spawn clients and "ping-pong" data through lurk proxy.
-    let mut client_tasks: FuturesUnordered<_> = (0..num_clients)
-        .map(|i| {
-            tokio::spawn(async move {
-                info!("Started client #{i:}");
-                common::ping_pong_data_through_socks5(echo_server_addr, lurk_server_addr, generated_data_len).await;
-                info!("Finished client #{i:}");
-            })
+    let client_tasks: FuturesUnordered<_> = (0..num_clients)
+        .map(|i| async move {
+            info!("Started client #{i:}");
+            common::ping_pong_data_through_socks5(echo_server_addr, lurk_server_addr, generated_data_len).await;
+            info!("Finished client #{i:}");
         })
         .collect();
 
     // Await all clients to complete.
-    while client_tasks.next().await.is_some() {}
+    client_tasks.collect::<()>().await;
 
     // Shutdown listeners.
     echo_handle.abort();

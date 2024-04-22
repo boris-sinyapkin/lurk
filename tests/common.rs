@@ -2,14 +2,14 @@ use log::{debug, LevelFilter};
 use log4rs_test_utils::test_logging::init_logging_once_for;
 use lurk::server::LurkServer;
 use reqwest::Proxy;
-use std::net::SocketAddr;
+use std::{net::SocketAddr, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream},
+    net::{TcpListener, TcpStream}, time::sleep,
 };
 
 pub fn init_logging() {
-    init_logging_once_for(None, LevelFilter::Debug, "{h({({l}):5.5})} [{M}] {f}:{L}: {m}{n}");
+    init_logging_once_for(None, LevelFilter::Trace, "{h({({l}):5.5})} [{M}] {f}:{L}: {m}{n}");
 }
 
 /// Spawn Lurk proxy instance.
@@ -88,8 +88,14 @@ pub async fn ping_pong_data_through_socks5(endpoint: SocketAddr, socks5_proxy: S
     let mut read_buff = vec![0u8; data_len];
     socks5_stream.read_exact(&mut read_buff).await.expect("Expect all data to be read");
 
+    // Shutdown write direction.
+    socks5_stream.shutdown().await.expect("Expect successful TCP stream shutdown");
+
     // Check that written and read data are equal.
     utils::assert_eq_vectors(&write_buff, &read_buff);
+
+    // 1 second sleep
+    sleep(Duration::from_millis(1000)).await;
 }
 
 mod utils {
