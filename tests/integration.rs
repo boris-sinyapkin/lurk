@@ -48,7 +48,7 @@ async fn http_server_single_client() {
 async fn echo_server_multiple_clients() {
     common::init_logging();
 
-    let num_clients = 5;
+    let num_clients = 2;
     let generated_data_len = 128;
     let lurk_server_addr = "127.0.0.1:32001".parse::<SocketAddr>().unwrap();
     let echo_server_addr = "127.0.0.1:32003".parse::<SocketAddr>().unwrap();

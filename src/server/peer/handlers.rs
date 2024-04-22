@@ -15,9 +15,11 @@ use crate::{
 use anyhow::{bail, Result};
 use human_bytes::human_bytes;
 use log::{debug, error, info, trace};
+use socket2::{SockRef, TcpKeepalive};
 use std::{
     net::SocketAddr,
     ops::{Deref, DerefMut},
+    time::Duration,
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -155,6 +157,16 @@ impl LurkSocks5CommandHandler {
         debug!("TCP connection establishment with the endpoint {}: ... ", endpoint_address);
         let mut r2l = TcpStream::connect(resolved_address).await.map_err(anyhow::Error::from)?;
         debug!("TCP connection establishment with the endpoint {}: SUCCESS", endpoint_address);
+
+        // Configure keep-alive probe.
+        let r2l_sock_ref = SockRef::from(&r2l);
+        let keepalive = TcpKeepalive::new()
+            .with_time(Duration::from_secs(300))    // 5 min
+            .with_interval(Duration::from_secs(60)) // 1 min
+            .with_retries(5);
+
+        // Configure keep-alive probe on R2L TCP socket.
+        r2l_sock_ref.set_tcp_keepalive(&keepalive)?;
 
         // Respond to relay request with success.
         let response = RelayResponse::builder().with_success().with_bound_address(server_address).build();
