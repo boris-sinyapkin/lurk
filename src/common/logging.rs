@@ -56,10 +56,10 @@ macro_rules! log_request_handling_error {
     };
 }
 
-macro_rules! log_closed_conn_with_error {
+macro_rules! log_closed_tcp_conn_with_error {
     ($peer:expr, $err:expr) => {
         error!(
-            "\n\n\tConnection with {} has been CLOSED with ERROR: \
+            "\n\n\tTCP connection with {} has been CLOSED with ERROR: \
             \n\t\treason: '{}' \
             \n",
             $peer, $err
@@ -67,12 +67,19 @@ macro_rules! log_closed_conn_with_error {
     };
 }
 
-macro_rules! log_closed_conn {
+macro_rules! log_closed_tcp_conn {
     ($peer:expr) => {
-        info!("\n\n\tConnection with {} has been CLOSED\n", $peer)
+        info!("TCP connection with {} has been CLOSED", $peer)
     };
 }
 
-pub(crate) use log_closed_conn;
-pub(crate) use log_closed_conn_with_error;
+macro_rules! log_opened_tcp_conn {
+    ($addr:expr) => {
+        info!("TCP connection with {} has been OPENED", $addr)
+    };
+}
+
+pub(crate) use log_opened_tcp_conn;
+pub(crate) use log_closed_tcp_conn;
+pub(crate) use log_closed_tcp_conn_with_error;
 pub(crate) use log_request_handling_error;
