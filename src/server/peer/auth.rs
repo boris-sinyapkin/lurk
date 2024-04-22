@@ -45,13 +45,14 @@ impl LurkAuthenticator {
 
     /// Find any common authentication method between available
     /// auth methods on server and supported methods by client.
-    pub fn select_auth_method(&mut self, peer_methods: &HashSet<LurkAuthMethod>) {
+    pub fn select_auth_method(&mut self, peer_methods: &HashSet<LurkAuthMethod>) -> Option<LurkAuthMethod> {
         let common_methods = self
             .available_methods
             .intersection(peer_methods)
             .collect::<HashSet<&LurkAuthMethod>>();
 
         self.selected_method = common_methods.into_iter().nth(0).copied();
+        self.selected_method
     }
 
     pub fn current_method(&self) -> Option<LurkAuthMethod> {

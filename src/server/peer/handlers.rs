@@ -1,7 +1,7 @@
-use super::{auth::LurkAuthenticator, LurkPeer};
+use super::{auth::LurkAuthenticator, LurkPeer, LurkPeerType};
 use crate::{
     common::{
-        error::{unsupported, LurkError, Unsupported},
+        error::LurkError,
         logging::{log_request_handling_error, log_tunnel_closed, log_tunnel_closed_with_error, log_tunnel_created},
         net::Address,
     },
@@ -26,47 +26,42 @@ use tokio::{
     net::TcpStream,
 };
 
-pub struct LurkSocks5PeerHandler<'a, S>
+pub struct LurkPeerHandler<S>
 where
     S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
 {
-    peer: &'a mut LurkPeer<S>,
-    authenticator: LurkAuthenticator,
+    peer: LurkPeer<S>,
     server_address: SocketAddr,
 }
 
-impl<'a, S> LurkSocks5PeerHandler<'a, S>
+impl<S> LurkPeerHandler<S>
 where
     S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
     <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(peer: &'a mut LurkPeer<S>, server_address: SocketAddr) -> LurkSocks5PeerHandler<'a, S> {
-        LurkSocks5PeerHandler {
-            peer,
-            server_address,
-            authenticator: LurkAuthenticator::new(),
-        }
+    pub fn new(peer: LurkPeer<S>, server_address: SocketAddr) -> LurkPeerHandler<S> {
+        LurkPeerHandler { peer, server_address }
     }
 
     pub async fn handle(&mut self) -> Result<()> {
-        // Complete handshake process and negotiate the authentication method.
-        self.process_handshake().await?;
-
-        // Authenticate client with selected method.
-        self.authenticator.authenticate(self.peer);
-
-        // Proceed with SOCKS5 relay handling.
-        // This will receive and process relay request, handle SOCKS5 command
-        // and establish the tunnel "client <-- lurk proxy --> target".
-        self.process_command().await
+        match self.peer.peer_type() {
+            LurkPeerType::SOCKS5 => {
+                // Complete handshake process and authenticate the client on success.
+                self.process_socks5_handshake().await?;
+                // Proceed with SOCKS5 relay handling.
+                // This will receive and process relay request, handle SOCKS5 command
+                // and establish the tunnel "client <-- lurk proxy --> target".
+                self.process_socks5_relay_request().await
+            }
+        }
     }
 
     /// Handshaking with SOCKS5 client.
     /// Afterwards, authenticator should contain negotiated method.
-    async fn process_handshake(&mut self) -> Result<()> {
+    async fn process_socks5_handshake(&mut self) -> Result<()> {
         let request = self.peer.stream.read_request::<HandshakeRequest>().await?;
 
-        if let Err(err) = LurkSocks5RequestHandler::handle_handshake_request(self.peer, &request, &mut self.authenticator).await {
+        if let Err(err) = self.process_socks5_handshake_impl(&request).await {
             log_request_handling_error!(self.peer, err, request, ());
         }
 
@@ -74,10 +69,11 @@ where
     }
 
     /// Handling SOCKS5 command which comes in relay request from client.
-    async fn process_command(&mut self) -> Result<()> {
+    async fn process_socks5_relay_request(&mut self) -> Result<()> {
         let request = self.peer.stream.read_request::<RelayRequest>().await?;
 
-        if let Err(err) = LurkSocks5RequestHandler::handle_relay_request(self.peer, &request, self.server_address).await {
+        // Handle SOCKS5 command that encapsulated in relay request data.
+        if let Err(err) = self.process_socks5_relay_request_impl(&request).await {
             let error_string = err.to_string();
             let response = RelayResponse::builder()
                 .with_err(err)
@@ -90,59 +86,52 @@ where
 
         Ok(())
     }
-}
 
-struct LurkSocks5RequestHandler {}
-
-impl LurkSocks5RequestHandler {
-    pub async fn handle_handshake_request<S>(
-        peer: &mut LurkPeer<S>,
-        request: &HandshakeRequest,
-        authenticator: &mut LurkAuthenticator,
-    ) -> Result<()>
-    where
-        S: LurkRequestRead + LurkResponseWrite + Unpin,
-    {
-        // Pick authentication method.
-        authenticator.select_auth_method(request.auth_methods());
-
-        // Prepare response.
+    async fn process_socks5_handshake_impl(&mut self, request: &HandshakeRequest) -> Result<()> {
+        // Create authenticator.
+        let mut authenticator = LurkAuthenticator::new();
+        // Create response builder.
         let mut response_builder = HandshakeResponse::builder();
-        if let Some(method) = authenticator.current_method() {
+
+        // Select the authentication method.
+        if let Some(method) = authenticator.select_auth_method(request.auth_methods()) {
+            debug!("Selected authentication method {:?} for {}", method, self.peer);
+
+            // Prepare and send the response with selected method.
             response_builder.with_auth_method(method);
-            debug!("Selected authentication method {:?} for {}", method, peer);
+            self.peer.stream.write_response(response_builder.build()).await?;
+
+            // Authenticate the client.
+            debug_assert!(authenticator.authenticate(&self.peer));
         } else {
+            // Method hasn't been selected.
+            debug!("No acceptable methods identified for for {}", self.peer);
+
+            // Notify client and bail out.
             response_builder.with_no_acceptable_method();
-            debug!("No acceptable methods identified for for {}", peer);
+            self.peer.stream.write_response(response_builder.build()).await?;
+
+            bail!(LurkError::NoAcceptableAuthMethod)
         }
 
-        // Communicate selected authentication method to the client.
-        peer.stream.write_response(response_builder.build()).await
+        Ok(())
     }
 
-    pub async fn handle_relay_request<S>(peer: &mut LurkPeer<S>, request: &RelayRequest, server_address: SocketAddr) -> Result<()>
-    where
-        S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
-        <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
-    {
+    async fn process_socks5_relay_request_impl(&mut self, request: &RelayRequest) -> Result<()> {
         // Handle SOCKS5 command that encapsulated in relay request data.
         match request.command() {
-            Command::TCPConnect => LurkSocks5CommandHandler::handle_connect(peer, server_address, request.endpoint_address()).await,
-            cmd => unsupported!(Unsupported::Socks5Command(cmd)),
+            Command::TCPConnect => self.process_socks5_connect(request.endpoint_address()).await,
+            cmd => bail!(LurkError::UnsupportedSocksCommand(cmd)),
         }
     }
-}
 
-struct LurkSocks5CommandHandler {}
-
-impl LurkSocks5CommandHandler {
-    pub async fn handle_connect<S>(peer: &mut LurkPeer<S>, server_address: SocketAddr, endpoint_address: &Address) -> Result<()>
+    async fn process_socks5_connect(&mut self, endpoint_address: &Address) -> Result<()>
     where
         S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
         <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
     {
-        debug!("Handling SOCKS5 CONNECT from {}", peer);
-        let peer_address = peer.to_string();
+        debug!("Handling SOCKS5 CONNECT from {}", self.peer);
+        let peer_address = self.peer.to_string();
 
         // Resolve endpoint address.
         trace!("Endpoint address {} resolution: ... ", endpoint_address);
@@ -169,25 +158,28 @@ impl LurkSocks5CommandHandler {
         r2l_sock_ref.set_tcp_keepalive(&keepalive)?;
 
         // Respond to relay request with success.
-        let response = RelayResponse::builder().with_success().with_bound_address(server_address).build();
-        peer.stream.write_response(response).await?;
+        let response = RelayResponse::builder()
+            .with_success()
+            .with_bound_address(self.server_address)
+            .build();
+        self.peer.stream.write_response(response).await?;
 
-        let mut l2r = &mut *peer.stream;
+        let mut l2r = &mut *self.peer.stream;
 
         // Create proxy tunnel which operates with the following TCP streams:
         // - L2R: client   <--> proxy
         // - R2L: endpoint <--> proxy
         let mut tunnel = LurkTunnel::new(&mut l2r, &mut r2l);
 
-        log_tunnel_created!(peer_address, server_address, endpoint_address);
+        log_tunnel_created!(peer_address, self.server_address, endpoint_address);
 
         // Start data relaying
         match tunnel.run().await {
             Ok((l2r, r2l)) => {
-                log_tunnel_closed!(peer_address, server_address, endpoint_address, l2r, r2l);
+                log_tunnel_closed!(peer_address, self.server_address, endpoint_address, l2r, r2l);
             }
             Err(err) => {
-                log_tunnel_closed_with_error!(peer_address, server_address, endpoint_address, err);
+                log_tunnel_closed_with_error!(peer_address, self.server_address, endpoint_address, err);
             }
         }
 
@@ -227,10 +219,9 @@ mod tests {
             .with(predicate::eq(HandshakeResponse::builder().with_auth_method(agreed_method).build()))
             .returning(|_| Ok(()));
 
-        let mut peer = LurkPeer::new(stream, addr, LurkPeerType::SOCKS5);
-        let mut socks5_handler = LurkSocks5PeerHandler::new(&mut peer, "127.0.0.1:666".parse().unwrap());
+        let peer = LurkPeer::new(stream, addr, LurkPeerType::SOCKS5);
+        let mut socks5_handler = LurkPeerHandler::new(peer, "127.0.0.1:666".parse().unwrap());
 
-        socks5_handler.process_handshake().await.unwrap();
-        assert_eq!(agreed_method, socks5_handler.authenticator.current_method().unwrap());
+        socks5_handler.process_socks5_handshake().await.unwrap();
     }
 }

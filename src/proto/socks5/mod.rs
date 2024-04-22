@@ -5,7 +5,7 @@
 /// https://datatracker.ietf.org/doc/html/rfc1928#ref-1
 ///
 use crate::common::{
-    error::{InvalidValue, LurkError, Unsupported},
+    error::{InvalidValue, LurkError},
     net::Address,
     LurkAuthMethod,
 };
@@ -161,9 +161,7 @@ impl ReplyStatus {
 impl From<LurkError> for ReplyStatus {
     fn from(err: LurkError) -> Self {
         match err {
-            LurkError::Unsupported(unsupported) => match unsupported {
-                Unsupported::Socks5Command(_) => ReplyStatus::CommandNotSupported,
-            },
+            LurkError::UnsupportedSocksCommand(_) => ReplyStatus::CommandNotSupported,
             LurkError::UnresolvedDomainName(_) => ReplyStatus::HostUnreachable,
             _ => ReplyStatus::GeneralFailure,
         }

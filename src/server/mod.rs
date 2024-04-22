@@ -1,4 +1,4 @@
-use self::peer::handlers::LurkSocks5PeerHandler;
+use self::peer::handlers::LurkPeerHandler;
 use crate::{
     common::logging::{log_closed_tcp_conn, log_closed_tcp_conn_with_error, log_opened_tcp_conn},
     io::stream::LurkStreamWrapper,
@@ -60,34 +60,18 @@ impl LurkServer {
 
         // Wrap incoming stream and create peer instance.
         let stream_wrapper = LurkStreamWrapper::new(stream);
-        let mut peer = LurkTcpPeer::new(stream_wrapper, addr, peer_type);
+        let peer = LurkTcpPeer::new(stream_wrapper, addr, peer_type);
 
         // Create connection handler and supply handling of new peer in a separate thread.
-        let mut handler = LurkConnectionHandler { server_address: self.addr };
+        let mut peer_handler = LurkPeerHandler::new(peer, self.addr);
 
         tokio::spawn(async move {
-            if let Err(err) = handler.handle_peer(&mut peer).await {
-                log_closed_tcp_conn_with_error!(peer, err);
+            if let Err(err) = peer_handler.handle().await {
+                log_closed_tcp_conn_with_error!(addr, err);
             } else {
-                log_closed_tcp_conn!(peer);
+                log_closed_tcp_conn!(addr);
             }
         });
-    }
-}
-
-struct LurkConnectionHandler {
-    server_address: SocketAddr,
-}
-
-impl LurkConnectionHandler {
-    async fn handle_peer(&mut self, peer: &mut LurkTcpPeer) -> Result<()> {
-        match peer.peer_type() {
-            LurkPeerType::SOCKS5 => {
-                let mut socks5_handler = LurkSocks5PeerHandler::new(peer, self.server_address);
-
-                socks5_handler.handle().await
-            }
-        }
     }
 }
 
