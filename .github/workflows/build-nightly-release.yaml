@@ -45,13 +45,9 @@ jobs:
       - name: Prepare release directory
         run: |
           mkdir -p ${{ env.NIGHTLY_RELEASE_DIR }}
-          echo -e "ref: $GITHUB_REF \ncommit: $GITHUB_SHA\nbuild: $(date +"%Y-%m-%dT%H:%M:%SZ")" > ${{ env.NIGHTLY_RELEASE_DIR }}/info.txt
-
-      - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ matrix.target }}
-          path: ${{ env.NIGHTLY_RELEASE_DIR }}/*
+          echo "ref: $GITHUB_REF"                     > ${{ env.NIGHTLY_RELEASE_DIR }}/info.txt
+          echo "commit: $GITHUB_SHA"                 >> ${{ env.NIGHTLY_RELEASE_DIR }}/info.txt
+          echo "date: $(date +"%Y-%m-%dT%H:%M:%SZ")" >> ${{ env.NIGHTLY_RELEASE_DIR }}/info.txt
 
       - name: Update nightly release
         uses: eine/tip@master
@@ -59,4 +55,10 @@ jobs:
           tag: nightly
           rm: true
           token: ${{ secrets.GITHUB_TOKEN }}
-          files: ${{ env.NIGHTLY_RELEASE_DIR }}/*.*
+          files: ${{ env.NIGHTLY_RELEASE_DIR }}/*
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: ${{ env.NIGHTLY_RELEASE_DIR }}/*
