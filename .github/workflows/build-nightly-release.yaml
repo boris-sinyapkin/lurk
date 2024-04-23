@@ -41,10 +41,15 @@ jobs:
         timeout-minutes: 120
         run: |
           cross build --target ${{ matrix.target }} --release
-    
-      - name: Prepare release directory
+
+      - name: Prepare release
         run: |
+          LURK_VERSION=$(grep -E '^version' Cargo.toml | awk '{print $3}' | sed 's/"//g')
+          LURK_RELEASE_NAME=lurk-v${VERSION}-nightly-${{ matrix.target }}
+
           mkdir -p ${{ env.NIGHTLY_RELEASE_DIR }}
+          mv target/${{ matrix.target }}/release/lurk ${{env.NIGHTLY_RELEASE_DIR}}/${LURK_RELEASE_NAME}
+
           echo "ref: $GITHUB_REF"                     > ${{ env.NIGHTLY_RELEASE_DIR }}/info.txt
           echo "commit: $GITHUB_SHA"                 >> ${{ env.NIGHTLY_RELEASE_DIR }}/info.txt
           echo "date: $(date +"%Y-%m-%dT%H:%M:%SZ")" >> ${{ env.NIGHTLY_RELEASE_DIR }}/info.txt
