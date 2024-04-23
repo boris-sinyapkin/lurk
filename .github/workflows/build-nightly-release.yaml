@@ -45,7 +45,7 @@ jobs:
       - name: Prepare release
         run: |
           LURK_VERSION=$(grep -E '^version' Cargo.toml | awk '{print $3}' | sed 's/"//g')
-          LURK_RELEASE_NAME=lurk-v${VERSION}-nightly-${{ matrix.target }}
+          LURK_RELEASE_NAME=lurk-v${LURK_VERSION}-nightly-${{ matrix.target }}
 
           mkdir -p ${{ env.NIGHTLY_RELEASE_DIR }}
           mv target/${{ matrix.target }}/release/lurk ${{env.NIGHTLY_RELEASE_DIR}}/${LURK_RELEASE_NAME}
@@ -55,7 +55,7 @@ jobs:
           echo "date: $(date +"%Y-%m-%dT%H:%M:%SZ")" >> ${{ env.NIGHTLY_RELEASE_DIR }}/info.txt
 
       - name: Update nightly release
-        uses: eine/tip@master
+        uses: pyTooling/Actions/releaser@main
         with:
           tag: nightly
           rm: true
