@@ -33,6 +33,9 @@ jobs:
         run: |
           cargo install cross
 
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Build ${{ matrix.target }}
         timeout-minutes: 120
         run: |
