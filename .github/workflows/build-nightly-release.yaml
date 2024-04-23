@@ -20,6 +20,7 @@ jobs:
           - x86_64-unknown-linux-musl
           - aarch64-unknown-linux-musl
 
+    steps:
       - name: Install Rust
         run: |
           rustup set profile minimal
