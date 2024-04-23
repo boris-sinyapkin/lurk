@@ -18,8 +18,8 @@ jobs:
       fail-fast: false
       matrix:
         target:
-          - x86_64-unknown-linux-musl
-          - aarch64-unknown-linux-musl
+          - x86_64-unknown-linux-gnu
+          - aarch64-unknown-linux-gnu
 
     steps:
       - name: Install Rust
@@ -50,15 +50,15 @@ jobs:
           mkdir -p ${{ env.NIGHTLY_RELEASE_DIR }}
           mv target/${{ matrix.target }}/release/lurk ${{env.NIGHTLY_RELEASE_DIR}}/${LURK_RELEASE_NAME}
 
-          echo "ref: $GITHUB_REF"                     > ${{ env.NIGHTLY_RELEASE_DIR }}/info.txt
-          echo "commit: $GITHUB_SHA"                 >> ${{ env.NIGHTLY_RELEASE_DIR }}/info.txt
-          echo "date: $(date +"%Y-%m-%dT%H:%M:%SZ")" >> ${{ env.NIGHTLY_RELEASE_DIR }}/info.txt
+          echo "ref: $GITHUB_REF"                     > ${{ env.NIGHTLY_RELEASE_DIR }}/README.md
+          echo "commit: $GITHUB_SHA"                 >> ${{ env.NIGHTLY_RELEASE_DIR }}/README.md
+          echo "date: $(date +"%Y-%m-%dT%H:%M:%SZ")" >> ${{ env.NIGHTLY_RELEASE_DIR }}/README.md
 
       - name: Update nightly release
         uses: pyTooling/Actions/releaser@main
         with:
           tag: nightly
-          rm: true
+          rm: false
           token: ${{ secrets.GITHUB_TOKEN }}
           files: ${{ env.NIGHTLY_RELEASE_DIR }}/*
 
