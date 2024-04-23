@@ -11,8 +11,6 @@ use tokio::net::{TcpListener, TcpStream};
 
 mod peer;
 
-pub mod config;
-
 pub struct LurkServer {
     addr: SocketAddr,
 }
