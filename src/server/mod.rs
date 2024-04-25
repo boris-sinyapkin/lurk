@@ -1,4 +1,4 @@
-use self::peer::handlers::LurkPeerHandler;
+use self::peer::handlers::LurkSocks5PeerHandler;
 use crate::{
     common::logging::{log_closed_tcp_conn, log_closed_tcp_conn_with_error, log_opened_tcp_conn},
     io::stream::LurkStreamWrapper,
@@ -58,10 +58,12 @@ impl LurkServer {
 
         // Wrap incoming stream and create peer instance.
         let stream_wrapper = LurkStreamWrapper::new(stream);
-        let peer = LurkTcpPeer::new(stream_wrapper, addr, peer_type);
+        let peer = LurkTcpPeer::new(stream_wrapper, addr);
 
         // Create connection handler and supply handling of new peer in a separate thread.
-        let mut peer_handler = LurkPeerHandler::new(peer, self.addr);
+        let mut peer_handler = match peer_type {
+            LurkPeerType::SOCKS5 => LurkSocks5PeerHandler::new(peer, self.addr),
+        };
 
         tokio::spawn(async move {
             if let Err(err) = peer_handler.handle().await {

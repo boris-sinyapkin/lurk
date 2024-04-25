@@ -1,4 +1,4 @@
-use super::{auth::LurkAuthenticator, LurkPeer, LurkPeerType};
+use super::{auth::LurkAuthenticator, LurkPeer};
 use crate::{
     common::{
         error::LurkError,
@@ -26,7 +26,7 @@ use tokio::{
     net::TcpStream,
 };
 
-pub struct LurkPeerHandler<S>
+pub struct LurkSocks5PeerHandler<S>
 where
     S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
 {
@@ -34,34 +34,30 @@ where
     server_address: SocketAddr,
 }
 
-impl<S> LurkPeerHandler<S>
+impl<S> LurkSocks5PeerHandler<S>
 where
     S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
     <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(peer: LurkPeer<S>, server_address: SocketAddr) -> LurkPeerHandler<S> {
-        LurkPeerHandler { peer, server_address }
+    pub fn new(peer: LurkPeer<S>, server_address: SocketAddr) -> LurkSocks5PeerHandler<S> {
+        LurkSocks5PeerHandler { peer, server_address }
     }
 
     pub async fn handle(&mut self) -> Result<()> {
-        match self.peer.peer_type() {
-            LurkPeerType::SOCKS5 => {
-                // Complete handshake process and authenticate the client on success.
-                self.process_socks5_handshake().await?;
-                // Proceed with SOCKS5 relay handling.
-                // This will receive and process relay request, handle SOCKS5 command
-                // and establish the tunnel "client <-- lurk proxy --> target".
-                self.process_socks5_relay_request().await
-            }
-        }
+        // Complete handshake process and authenticate the client on success.
+        self.process_handshake().await?;
+        // Proceed with SOCKS5 relay handling.
+        // This will receive and process relay request, handle SOCKS5 command
+        // and establish the tunnel "client <-- lurk proxy --> target".
+        self.process_relay_request().await
     }
 
     /// Handshaking with SOCKS5 client.
     /// Afterwards, authenticator should contain negotiated method.
-    async fn process_socks5_handshake(&mut self) -> Result<()> {
+    async fn process_handshake(&mut self) -> Result<()> {
         let request = self.peer.stream.read_request::<HandshakeRequest>().await?;
 
-        if let Err(err) = self.process_socks5_handshake_impl(&request).await {
+        if let Err(err) = self.process_handshake_impl(&request).await {
             log_request_handling_error!(self.peer, err, request, ());
         }
 
@@ -69,11 +65,11 @@ where
     }
 
     /// Handling SOCKS5 command which comes in relay request from client.
-    async fn process_socks5_relay_request(&mut self) -> Result<()> {
+    async fn process_relay_request(&mut self) -> Result<()> {
         let request = self.peer.stream.read_request::<RelayRequest>().await?;
 
         // Handle SOCKS5 command that encapsulated in relay request data.
-        if let Err(err) = self.process_socks5_relay_request_impl(&request).await {
+        if let Err(err) = self.process_relay_request_impl(&request).await {
             let error_string = err.to_string();
             let response = RelayResponse::builder()
                 .with_err(err)
@@ -87,7 +83,7 @@ where
         Ok(())
     }
 
-    async fn process_socks5_handshake_impl(&mut self, request: &HandshakeRequest) -> Result<()> {
+    async fn process_handshake_impl(&mut self, request: &HandshakeRequest) -> Result<()> {
         // Create authenticator.
         let mut authenticator = LurkAuthenticator::new();
         // Create response builder.
@@ -117,7 +113,7 @@ where
         Ok(())
     }
 
-    async fn process_socks5_relay_request_impl(&mut self, request: &RelayRequest) -> Result<()> {
+    async fn process_relay_request_impl(&mut self, request: &RelayRequest) -> Result<()> {
         // Handle SOCKS5 command that encapsulated in relay request data.
         match request.command() {
             Command::TCPConnect => self.process_socks5_connect(request.endpoint_address()).await,
@@ -190,9 +186,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        common::LurkAuthMethod, io::stream::MockLurkStreamWrapper, proto::socks5::response::HandshakeResponse, server::peer::LurkPeerType,
-    };
+    use crate::{common::LurkAuthMethod, io::stream::MockLurkStreamWrapper, proto::socks5::response::HandshakeResponse};
     use mockall::predicate;
     use std::{
         collections::HashSet,
@@ -219,9 +213,9 @@ mod tests {
             .with(predicate::eq(HandshakeResponse::builder().with_auth_method(agreed_method).build()))
             .returning(|_| Ok(()));
 
-        let peer = LurkPeer::new(stream, addr, LurkPeerType::SOCKS5);
-        let mut socks5_handler = LurkPeerHandler::new(peer, "127.0.0.1:666".parse().unwrap());
+        let peer = LurkPeer::new(stream, addr);
+        let mut socks5_handler = LurkSocks5PeerHandler::new(peer, "127.0.0.1:666".parse().unwrap());
 
-        socks5_handler.process_socks5_handshake().await.unwrap();
+        socks5_handler.process_handshake().await.unwrap();
     }
 }

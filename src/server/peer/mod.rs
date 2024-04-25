@@ -54,7 +54,6 @@ where
 {
     addr: SocketAddr,
     stream: S,
-    peer_type: LurkPeerType,
 }
 
 impl<S> LurkPeer<S>
@@ -62,12 +61,8 @@ where
     S: LurkRequestRead + LurkResponseWrite + Unpin + DerefMut,
     <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
 {
-    pub fn new(stream: S, addr: SocketAddr, peer_type: LurkPeerType) -> LurkPeer<S> {
-        LurkPeer { stream, addr, peer_type }
-    }
-
-    pub fn peer_type(&self) -> LurkPeerType {
-        self.peer_type
+    pub fn new(stream: S, addr: SocketAddr) -> LurkPeer<S> {
+        LurkPeer { stream, addr }
     }
 }
 
