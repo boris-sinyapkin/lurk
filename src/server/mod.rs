@@ -24,10 +24,7 @@ impl LurkServer {
         let tcp_listener = self.bind().await?;
         loop {
             match tcp_listener.accept().await {
-                Ok((stream, addr)) => {
-                    log_opened_tcp_conn!(addr);
-                    self.on_new_peer_connected(stream, addr).await
-                }
+                Ok((stream, addr)) => self.on_tcp_connection_established(stream, addr).await,
                 Err(err) => warn!("Error while accepting the TCP connection: {}", err),
             }
         }
@@ -40,7 +37,8 @@ impl LurkServer {
         Ok(tcp_listener)
     }
 
-    async fn on_new_peer_connected(&self, stream: TcpStream, addr: SocketAddr) {
+    async fn on_tcp_connection_established(&self, stream: TcpStream, addr: SocketAddr) {
+        log_opened_tcp_conn!(addr);
         // Identify peer type.
         let peer_type = match LurkPeerType::from_tcp_stream(&stream).await {
             Ok(t) => {
