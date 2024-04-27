@@ -2,7 +2,7 @@ use super::{auth::LurkAuthenticator, LurkPeer};
 use crate::{
     common::{
         error::LurkError,
-        logging::{log_request_handling_error, log_tunnel_closed, log_tunnel_closed_with_error, log_tunnel_created},
+        logging,
         net::{
             tcp::{establish_tcp_connection_with_opts, TcpConnectionOptions},
             Address,
@@ -58,7 +58,7 @@ where
         let request = self.peer.stream.read_request::<HandshakeRequest>().await?;
 
         if let Err(err) = self.process_handshake_impl(&request).await {
-            log_request_handling_error!(self.peer, err, request, ());
+            logging::log_request_handling_error!(self.peer, err, request, ());
         }
 
         Ok(())
@@ -76,7 +76,7 @@ where
                 .with_bound_address(self.server_address)
                 .build();
 
-            log_request_handling_error!(self.peer, error_string, request, response);
+            logging::log_request_handling_error!(self.peer, error_string, request, response);
             self.peer.stream.write_response(response).await?
         }
 
@@ -155,15 +155,15 @@ where
         // - R2L: endpoint <--> proxy
         let mut tunnel = LurkTunnel::new(&mut l2r, &mut r2l);
 
-        log_tunnel_created!(peer_address, self.server_address, endpoint_address);
+        logging::log_tunnel_created!(peer_address, self.server_address, endpoint_address);
 
         // Start data relaying
         match tunnel.run().await {
             Ok((l2r, r2l)) => {
-                log_tunnel_closed!(peer_address, self.server_address, endpoint_address, l2r, r2l);
+                logging::log_tunnel_closed!(peer_address, self.server_address, endpoint_address, l2r, r2l);
             }
             Err(err) => {
-                log_tunnel_closed_with_error!(peer_address, self.server_address, endpoint_address, err);
+                logging::log_tunnel_closed_with_error!(peer_address, self.server_address, endpoint_address, err);
             }
         }
 
