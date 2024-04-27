@@ -3,7 +3,7 @@ use crate::{
     common::{
         error::LurkError,
         logging::{log_request_handling_error, log_tunnel_closed, log_tunnel_closed_with_error, log_tunnel_created},
-        net::Address,
+        net::{self, Address},
     },
     io::{tunnel::LurkTunnel, LurkRequestRead, LurkResponseWrite},
     proto::socks5::{
@@ -14,17 +14,14 @@ use crate::{
 };
 use anyhow::{bail, Result};
 use human_bytes::human_bytes;
-use log::{debug, error, info, trace};
-use socket2::{SockRef, TcpKeepalive};
+use log::{debug, error, info};
+use socket2::TcpKeepalive;
 use std::{
     net::SocketAddr,
     ops::{Deref, DerefMut},
     time::Duration,
 };
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    net::TcpStream,
-};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 pub struct LurkSocks5PeerHandler<S>
 where
@@ -129,29 +126,17 @@ where
         debug!("Handling SOCKS5 CONNECT from {}", self.peer);
         let peer_address = self.peer.to_string();
 
-        // Resolve endpoint address.
-        trace!("Endpoint address {} resolution: ... ", endpoint_address);
-        let resolved_address = endpoint_address.to_socket_addr().await?;
-        trace!(
-            "Endpoint address {} resolution: SUCCESS with {}",
-            endpoint_address,
-            resolved_address
+        // Create TCP options.
+        let mut tcp_opts = net::TcpConnectionOptions::new();
+        tcp_opts.set_keepalive(
+            TcpKeepalive::new()
+                .with_time(Duration::from_secs(300))    // 5 min
+                .with_interval(Duration::from_secs(60)) // 1 min
+                .with_retries(5),
         );
 
-        // Establish TCP connection with the endpoint.
-        debug!("TCP connection establishment with the endpoint {}: ... ", endpoint_address);
-        let mut r2l = TcpStream::connect(resolved_address).await.map_err(anyhow::Error::from)?;
-        debug!("TCP connection establishment with the endpoint {}: SUCCESS", endpoint_address);
-
-        // Configure keep-alive probe.
-        let r2l_sock_ref = SockRef::from(&r2l);
-        let keepalive = TcpKeepalive::new()
-            .with_time(Duration::from_secs(300))    // 5 min
-            .with_interval(Duration::from_secs(60)) // 1 min
-            .with_retries(5);
-
-        // Configure keep-alive probe on R2L TCP socket.
-        r2l_sock_ref.set_tcp_keepalive(&keepalive)?;
+        // Establish TCP connection with the target endpoint.
+        let mut r2l = net::establish_tcp_connection_with_opts(endpoint_address, &tcp_opts).await?;
 
         // Respond to relay request with success.
         let response = RelayResponse::builder()
