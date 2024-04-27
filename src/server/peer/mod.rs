@@ -1,8 +1,7 @@
 use crate::io::{stream::LurkStreamWrapper, LurkRequestRead, LurkResponseWrite};
-use anyhow::{bail, Error, Result};
+use anyhow::{bail, Result};
 use std::{
     fmt::Display,
-    io::{self},
     net::SocketAddr,
     ops::{Deref, DerefMut},
 };
@@ -32,10 +31,10 @@ impl LurkPeerType {
         if peeked_bytes == 1 {
             match buff[0] {
                 0x05 => Ok(LurkPeerType::SOCKS5),
-                t => bail!(Error::msg(format!("Unknown peer type {t:#04x}"))),
+                t => bail!("Unknown peer type {t:#04x}"),
             }
         } else {
-            bail!(io::Error::new(io::ErrorKind::UnexpectedEof, "unable to peek peer type from stream"))
+            bail!("Unable to identify peer type (EOF)")
         }
     }
 }
