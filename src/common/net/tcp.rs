@@ -55,3 +55,27 @@ pub async fn establish_tcp_connection_with_opts(endpoint: &Address, tcp_opts: &T
 
     Ok(tcp_stream)
 }
+
+pub mod listener {
+
+    use anyhow::Result;
+    use std::net::SocketAddr;
+    use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
+
+    /// Custom implementation of TCP listener.
+    pub struct LurkTcpListener {
+        inner: TcpListener,
+    }
+
+    impl LurkTcpListener {
+        pub async fn bind(addr: impl ToSocketAddrs) -> Result<LurkTcpListener> {
+            Ok(LurkTcpListener {
+                inner: TcpListener::bind(&addr).await?,
+            })
+        }
+
+        pub async fn accept(&self) -> Result<(TcpStream, SocketAddr)> {
+            self.inner.accept().await.map_err(anyhow::Error::from)
+        }
+    }
+}

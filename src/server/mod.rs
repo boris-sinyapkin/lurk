@@ -1,7 +1,10 @@
 use self::peer::handlers::LurkSocks5PeerHandler;
 use crate::{
-    common::logging::{
-        log_closed_tcp_conn, log_closed_tcp_conn_with_error, log_failed_tcp_conn_acception, log_opened_tcp_conn, log_skipped_tcp_conn,
+    common::{
+        logging::{
+            log_closed_tcp_conn, log_closed_tcp_conn_with_error, log_failed_tcp_conn_acception, log_opened_tcp_conn, log_skipped_tcp_conn,
+        },
+        net::tcp::listener::LurkTcpListener,
     },
     io::stream::LurkStreamWrapper,
     server::peer::{LurkPeerType, LurkTcpPeer},
@@ -9,10 +12,7 @@ use crate::{
 use anyhow::Result;
 use log::{error, info, warn};
 use std::{net::SocketAddr, time::Duration};
-use tokio::{
-    net::{TcpListener, TcpStream},
-    time::sleep,
-};
+use tokio::{net::TcpStream, time::sleep};
 
 mod peer;
 
@@ -26,7 +26,9 @@ impl LurkServer {
     }
 
     pub async fn run(&self) -> Result<()> {
-        let tcp_listener = self.bind().await?;
+        let tcp_listener = LurkTcpListener::bind(self.addr).await?;
+        info!("Listening on {}", self.addr);
+
         loop {
             match tcp_listener.accept().await {
                 Ok((stream, addr)) => self.on_tcp_connection_established(stream, addr).await,
@@ -36,13 +38,6 @@ impl LurkServer {
                 }
             }
         }
-    }
-
-    async fn bind(&self) -> Result<TcpListener> {
-        let tcp_listener = TcpListener::bind(self.addr).await?;
-        info!("Listening on {}", self.addr);
-
-        Ok(tcp_listener)
     }
 
     async fn on_tcp_connection_established(&self, stream: TcpStream, addr: SocketAddr) {
