@@ -1,13 +1,18 @@
 use self::peer::handlers::LurkSocks5PeerHandler;
 use crate::{
-    common::logging::{log_closed_tcp_conn, log_closed_tcp_conn_with_error, log_opened_tcp_conn},
+    common::logging::{
+        log_closed_tcp_conn, log_closed_tcp_conn_with_error, log_failed_tcp_conn_acception, log_opened_tcp_conn, log_skipped_tcp_conn,
+    },
     io::stream::LurkStreamWrapper,
     server::peer::{LurkPeerType, LurkTcpPeer},
 };
 use anyhow::Result;
-use log::{debug, error, info, warn};
-use std::net::SocketAddr;
-use tokio::net::{TcpListener, TcpStream};
+use log::{error, info, warn};
+use std::{net::SocketAddr, time::Duration};
+use tokio::{
+    net::{TcpListener, TcpStream},
+    time::sleep,
+};
 
 mod peer;
 
@@ -25,7 +30,10 @@ impl LurkServer {
         loop {
             match tcp_listener.accept().await {
                 Ok((stream, addr)) => self.on_tcp_connection_established(stream, addr).await,
-                Err(err) => warn!("Error while accepting the TCP connection: {}", err),
+                Err(err) => {
+                    log_failed_tcp_conn_acception!(err);
+                    sleep(Duration::from_millis(500)).await;
+                }
             }
         }
     }
@@ -38,21 +46,16 @@ impl LurkServer {
     }
 
     async fn on_tcp_connection_established(&self, stream: TcpStream, addr: SocketAddr) {
-        log_opened_tcp_conn!(addr);
         // Identify peer type.
         let peer_type = match LurkPeerType::from_tcp_stream(&stream).await {
-            Ok(t) => {
-                debug!("Connected {addr} peer type {t}");
-                t
-            }
+            Ok(t) => t,
             Err(err) => {
-                error!(
-                    "Failed to identify connected {addr} peer type \
-                        with error '{err}'. Skip connection."
-                );
+                log_skipped_tcp_conn!(addr, err);
                 return;
             }
         };
+
+        log_opened_tcp_conn!(addr, peer_type);
 
         // Wrap incoming stream and create peer instance.
         let stream_wrapper = LurkStreamWrapper::new(stream);

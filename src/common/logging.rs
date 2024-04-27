@@ -74,12 +74,41 @@ macro_rules! log_closed_tcp_conn {
 }
 
 macro_rules! log_opened_tcp_conn {
-    ($addr:expr) => {
-        info!("TCP connection with {} has been OPENED", $addr)
+    ($addr:expr, $peer_type:expr) => {
+        info!(
+            "\n\n\tTCP connection with {} has been OPENED: \
+            \n\t\ttype: '{}' \
+            \n",
+            $addr, $peer_type
+        )
     };
 }
 
-pub(crate) use log_opened_tcp_conn;
+macro_rules! log_failed_tcp_conn_acception {
+    ($err:expr) => {
+        warn!(
+            "\n\n\tTCP connection was NOT ACCEPTED: \
+            \n\t\treason: '{}' \
+            \n",
+            $err
+        )
+    };
+}
+
+macro_rules! log_skipped_tcp_conn {
+    ($addr:expr, $reason:expr) => {
+        info!(
+            "\n\n\tTCP connection with {} has been SKIPPED: \
+            \n\t\treason: '{}' \
+            \n",
+            $addr, $reason
+        )
+    };
+}
+
 pub(crate) use log_closed_tcp_conn;
 pub(crate) use log_closed_tcp_conn_with_error;
+pub(crate) use log_failed_tcp_conn_acception;
+pub(crate) use log_opened_tcp_conn;
 pub(crate) use log_request_handling_error;
+pub(crate) use log_skipped_tcp_conn;
