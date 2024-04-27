@@ -47,10 +47,7 @@ impl Display for LurkPeerType {
     }
 }
 
-pub struct LurkPeer<S>
-where
-    S: LurkRequestRead + LurkResponseWrite + Unpin,
-{
+pub struct LurkPeer<S> {
     addr: SocketAddr,
     stream: S,
 }
@@ -65,10 +62,7 @@ where
     }
 }
 
-impl<S> Display for LurkPeer<S>
-where
-    S: LurkRequestRead + LurkResponseWrite + Unpin,
-{
+impl<S> Display for LurkPeer<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.addr)
     }

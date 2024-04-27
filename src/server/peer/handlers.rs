@@ -26,10 +26,7 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 
-pub struct LurkSocks5PeerHandler<S>
-where
-    S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
-{
+pub struct LurkSocks5PeerHandler<S> {
     peer: LurkPeer<S>,
     server_address: SocketAddr,
 }
@@ -121,11 +118,7 @@ where
         }
     }
 
-    async fn process_socks5_connect(&mut self, endpoint_address: &Address) -> Result<()>
-    where
-        S: LurkRequestRead + LurkResponseWrite + DerefMut + Unpin,
-        <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
-    {
+    async fn process_socks5_connect(&mut self, endpoint_address: &Address) -> Result<()> {
         debug!("Handling SOCKS5 CONNECT from {}", self.peer);
         let peer_address = self.peer.to_string();
 

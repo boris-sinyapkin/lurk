@@ -1,11 +1,7 @@
 use anyhow::Result;
 use tokio::io::{copy_bidirectional, AsyncRead, AsyncWrite};
 
-pub struct LurkTunnel<'a, X, Y>
-where
-    X: AsyncRead + AsyncWrite + Unpin,
-    Y: AsyncRead + AsyncWrite + Unpin,
-{
+pub struct LurkTunnel<'a, X, Y> {
     l2r: &'a mut X,
     r2l: &'a mut Y,
 }

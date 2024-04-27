@@ -12,10 +12,7 @@ use mockall::mock;
 
 /// Stream wrapper implementation
 
-pub struct LurkStreamWrapper<Stream>
-where
-    Stream: AsyncReadExt + AsyncWriteExt + Unpin,
-{
+pub struct LurkStreamWrapper<Stream> {
     stream: Stream,
 }
 
@@ -58,20 +55,14 @@ where
     }
 }
 
-impl<Stream> Deref for LurkStreamWrapper<Stream>
-where
-    Stream: AsyncReadExt + AsyncWriteExt + Unpin,
-{
+impl<Stream> Deref for LurkStreamWrapper<Stream> {
     type Target = Stream;
     fn deref(&self) -> &Self::Target {
         &self.stream
     }
 }
 
-impl<Stream> DerefMut for LurkStreamWrapper<Stream>
-where
-    Stream: AsyncReadExt + AsyncWriteExt + Unpin,
-{
+impl<Stream> DerefMut for LurkStreamWrapper<Stream> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.stream
     }
