@@ -3,7 +3,10 @@ use crate::{
     common::{
         error::LurkError,
         logging::{log_request_handling_error, log_tunnel_closed, log_tunnel_closed_with_error, log_tunnel_created},
-        net::{self, Address},
+        net::{
+            tcp::{establish_tcp_connection_with_opts, TcpConnectionOptions},
+            Address,
+        },
     },
     io::{tunnel::LurkTunnel, LurkRequestRead, LurkResponseWrite},
     proto::socks5::{
@@ -127,7 +130,7 @@ where
         let peer_address = self.peer.to_string();
 
         // Create TCP options.
-        let mut tcp_opts = net::TcpConnectionOptions::new();
+        let mut tcp_opts = TcpConnectionOptions::new();
         tcp_opts.set_keepalive(
             TcpKeepalive::new()
                 .with_time(Duration::from_secs(300))    // 5 min
@@ -136,7 +139,7 @@ where
         );
 
         // Establish TCP connection with the target endpoint.
-        let mut r2l = net::establish_tcp_connection_with_opts(endpoint_address, &tcp_opts).await?;
+        let mut r2l = establish_tcp_connection_with_opts(endpoint_address, &tcp_opts).await?;
 
         // Respond to relay request with success.
         let response = RelayResponse::builder()
