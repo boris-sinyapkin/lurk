@@ -1,4 +1,4 @@
-use crate::io::{stream::LurkStreamWrapper, LurkRequestRead, LurkResponseWrite};
+use crate::io::{stream::LurkStream, LurkRequestRead, LurkResponseWrite};
 use anyhow::{bail, Result};
 use std::{
     fmt::Display,
@@ -13,7 +13,7 @@ use tokio::{
 mod auth;
 pub mod handlers;
 
-pub type LurkTcpPeer = LurkPeer<LurkStreamWrapper<TcpStream>>;
+pub type LurkTcpPeer = LurkPeer<LurkStream<TcpStream>>;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum LurkPeerType {

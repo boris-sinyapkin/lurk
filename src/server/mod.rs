@@ -1,7 +1,7 @@
 use self::peer::handlers::LurkSocks5PeerHandler;
 use crate::{
     common::{logging, net::tcp::listener::LurkTcpListener},
-    io::stream::LurkStreamWrapper,
+    io::stream::LurkStream,
     server::peer::{LurkPeerType, LurkTcpPeer},
 };
 use anyhow::Result;
@@ -48,7 +48,7 @@ impl LurkServer {
         logging::log_opened_tcp_conn!(addr, peer_type);
 
         // Wrap incoming stream and create peer instance.
-        let stream_wrapper = LurkStreamWrapper::new(stream);
+        let stream_wrapper = LurkStream::new(stream);
         let peer = LurkTcpPeer::new(stream_wrapper, addr);
 
         // Create connection handler and supply handling of new peer in a separate thread.
