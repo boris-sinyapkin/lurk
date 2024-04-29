@@ -9,17 +9,15 @@ use tokio::{
     time::sleep,
 };
 
-pub const TCP_OPENED_CONN_LIMIT: usize = 1024;
-
 pub fn init_logging() {
     init_logging_once_for(None, LevelFilter::Trace, "{h({({l}):5.5})} [{M}] {f}:{L}: {m}{n}");
 }
 
 /// Spawn Lurk proxy instance.
-pub async fn spawn_lurk_server(addr: SocketAddr) -> tokio::task::JoinHandle<()> {
+pub async fn spawn_lurk_server(addr: SocketAddr, tcp_conn_limit: usize) -> tokio::task::JoinHandle<()> {
     // Run proxy
     let handle = tokio::spawn(async move {
-        LurkServer::new(addr, TCP_OPENED_CONN_LIMIT)
+        LurkServer::new(addr, tcp_conn_limit)
             .run()
             .await
             .expect("Error during proxy server run")
@@ -111,7 +109,7 @@ mod utils {
 
     use rand::Rng;
 
-    pub fn assert_eq_vectors<T: Eq + Debug>(expected: &Vec<T>, actual: &Vec<T>) {
+    pub fn assert_eq_vectors<T: Eq + Debug>(expected: &[T], actual: &[T]) {
         let matching = expected
             .iter()
             .zip(actual)
