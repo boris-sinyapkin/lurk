@@ -1,9 +1,5 @@
 use super::{Address, Command};
-use crate::{
-    common::{error::InvalidValue, LurkAuthMethod},
-    io::LurkRequest,
-    proto::socks5::consts,
-};
+use crate::{auth::LurkAuthMethod, common::error::InvalidValue, io::LurkRequest, proto::socks5::consts};
 use anyhow::{ensure, Result};
 use cfg_if::cfg_if;
 use std::collections::HashSet;

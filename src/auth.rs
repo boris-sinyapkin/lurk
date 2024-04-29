@@ -1,6 +1,15 @@
-use crate::common::{net::tcp::connection::LurkTcpConnection, LurkAuthMethod};
+use crate::net::tcp::connection::LurkTcpConnection;
 use log::error;
 use std::collections::HashSet;
+
+#[repr(u8)]
+#[rustfmt::skip]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub enum LurkAuthMethod {
+    None,
+    GssAPI,
+    Password,
+}
 
 pub struct LurkAuthenticator {
     available_methods: HashSet<LurkAuthMethod>,

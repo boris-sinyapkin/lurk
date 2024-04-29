@@ -1,6 +1,6 @@
 use self::handlers::LurkSocks5Handler;
-use crate::common::{
-    logging::{self},
+use crate::{
+    common::logging::{self},
     net::tcp::{
         connection::{LurkTcpConnection, LurkTcpConnectionLabel},
         listener::LurkTcpListener,
@@ -20,8 +20,7 @@ pub struct LurkServer {
 }
 
 impl LurkServer {
-
-    // Delay after non-transient TCP acception failure, e.g. 
+    // Delay after non-transient TCP acception failure, e.g.
     // handle resource exhaustion errors.
     const DELAY_AFTER_ERROR_MILLIS: u64 = 500;
 

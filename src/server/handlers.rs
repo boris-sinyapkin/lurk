@@ -1,17 +1,14 @@
 use crate::{
-    common::{
-        auth::LurkAuthenticator,
-        error::LurkError,
-        logging,
-        net::{
-            tcp::{
-                connection::{LurkTcpConnection, LurkTcpConnectionLabel},
-                establish_tcp_connection_with_opts, TcpConnectionOptions,
-            },
-            Address,
-        },
-    },
+    auth::LurkAuthenticator,
+    common::{error::LurkError, logging},
     io::{tunnel::LurkTunnel, LurkRequestRead, LurkResponseWrite},
+    net::{
+        tcp::{
+            connection::{LurkTcpConnection, LurkTcpConnectionLabel},
+            establish_tcp_connection_with_opts, TcpConnectionOptions,
+        },
+        Address,
+    },
     proto::socks5::{
         request::{HandshakeRequest, RelayRequest},
         response::{HandshakeResponse, RelayResponse},

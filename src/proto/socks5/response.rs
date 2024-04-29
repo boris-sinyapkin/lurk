@@ -1,5 +1,5 @@
 use super::{consts, Address, ReplyStatus};
-use crate::{common::LurkAuthMethod, io::LurkResponse};
+use crate::{auth::LurkAuthMethod, io::LurkResponse};
 use anyhow::{bail, Result};
 use bytes::{BufMut, BytesMut};
 use log::error;
