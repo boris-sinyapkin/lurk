@@ -71,12 +71,17 @@ pub mod listener {
     }
 
     impl LurkTcpListener {
-        pub async fn bind(addr: impl ToSocketAddrs) -> Result<LurkTcpListener> {
+        /// Binds TCP listener to passed `addr`.
+        /// 
+        /// Argument `conn_limit` sets the limit of open TCP connections. Thus accepting of new connections 
+        /// on returned `LurkTcpListener` will be paused, when number  of open TCP connections will reach 
+        /// the `conn_limit`.
+        pub async fn bind(addr: impl ToSocketAddrs, conn_limit: usize) -> Result<LurkTcpListener> {
             // Bind TCP listener.
             let listener = TcpListener::bind(addr).await?;
 
             // Create backpressure limit and supply the receiver to the created stream.
-            let (bp_tx, bp_rx) = backpressure::new(1000);
+            let (bp_tx, bp_rx) = backpressure::new(conn_limit);
             let incoming = TcpListenerStream::new(listener).apply_backpressure(bp_rx);
 
             Ok(LurkTcpListener {

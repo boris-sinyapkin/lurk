@@ -5,8 +5,11 @@ use reqwest::Proxy;
 use std::{net::SocketAddr, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream}, time::sleep,
+    net::{TcpListener, TcpStream},
+    time::sleep,
 };
+
+pub const TCP_OPENED_CONN_LIMIT: usize = 1024;
 
 pub fn init_logging() {
     init_logging_once_for(None, LevelFilter::Trace, "{h({({l}):5.5})} [{M}] {f}:{L}: {m}{n}");
@@ -15,7 +18,12 @@ pub fn init_logging() {
 /// Spawn Lurk proxy instance.
 pub async fn spawn_lurk_server(addr: SocketAddr) -> tokio::task::JoinHandle<()> {
     // Run proxy
-    let handle = tokio::spawn(async move { LurkServer::new(addr).run().await.expect("Error during proxy server run") });
+    let handle = tokio::spawn(async move {
+        LurkServer::new(addr, TCP_OPENED_CONN_LIMIT)
+            .run()
+            .await
+            .expect("Error during proxy server run")
+    });
 
     // Yeild execution untill server binds
     tokio::task::yield_now().await;

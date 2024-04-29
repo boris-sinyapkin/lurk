@@ -15,17 +15,18 @@ use tokio::time::sleep;
 mod handlers;
 
 pub struct LurkServer {
-    addr: SocketAddr,
+    bind_addr: SocketAddr,
+    conn_limit: usize,
 }
 
 impl LurkServer {
-    pub fn new(addr: SocketAddr) -> LurkServer {
-        LurkServer { addr }
+    pub fn new(bind_addr: SocketAddr, conn_limit: usize) -> LurkServer {
+        LurkServer { bind_addr, conn_limit }
     }
 
     pub async fn run(&self) -> Result<()> {
-        let mut tcp_listener = LurkTcpListener::bind(self.addr).await?;
-        info!("Listening on {}", self.addr);
+        let mut tcp_listener = LurkTcpListener::bind(self.bind_addr, self.conn_limit).await?;
+        info!("Listening on {} (TCP connections limit {})", self.bind_addr, self.conn_limit);
 
         loop {
             match tcp_listener.accept().await {
@@ -52,7 +53,7 @@ impl LurkServer {
 
         // Create connection handler and supply handling of particular traffic label in a separate thread.
         let mut connection_handler = match conn.label() {
-            LurkTcpConnectionLabel::SOCKS5 => LurkSocks5Handler::new(conn, self.addr),
+            LurkTcpConnectionLabel::SOCKS5 => LurkSocks5Handler::new(conn, self.bind_addr),
         };
 
         tokio::spawn(async move {
