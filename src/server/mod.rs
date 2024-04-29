@@ -1,15 +1,18 @@
-use self::peer::handlers::LurkSocks5PeerHandler;
-use crate::{
-    common::{logging, net::tcp::listener::LurkTcpListener},
-    io::stream::LurkStream,
-    server::peer::{LurkPeerType, LurkTcpPeer},
+use self::handlers::LurkSocks5Handler;
+use crate::common::{
+    logging::{self},
+    net::tcp::{
+        connection::{LurkTcpConnection, LurkTcpConnectionLabel},
+        listener::LurkTcpListener,
+    },
 };
 use anyhow::Result;
+use async_listen::is_transient_error;
 use log::{error, info, warn};
 use std::{net::SocketAddr, time::Duration};
-use tokio::{net::TcpStream, time::sleep};
+use tokio::time::sleep;
 
-mod peer;
+mod handlers;
 
 pub struct LurkServer {
     addr: SocketAddr,
@@ -21,46 +24,42 @@ impl LurkServer {
     }
 
     pub async fn run(&self) -> Result<()> {
-        let tcp_listener = LurkTcpListener::bind(self.addr).await?;
+        let mut tcp_listener = LurkTcpListener::bind(self.addr).await?;
         info!("Listening on {}", self.addr);
 
         loop {
             match tcp_listener.accept().await {
-                Ok((stream, addr)) => self.on_tcp_connection_established(stream, addr).await,
-                Err(err) => {
-                    logging::log_failed_tcp_conn_acception!(err);
-                    sleep(Duration::from_millis(500)).await;
-                }
+                Ok(conn) => self.on_tcp_connection_established(conn).await,
+                Err(err) => self.on_tcp_acception_error(err).await,
             }
         }
     }
 
-    async fn on_tcp_connection_established(&self, stream: TcpStream, addr: SocketAddr) {
-        // Identify peer type.
-        let peer_type = match LurkPeerType::from_tcp_stream(&stream).await {
-            Ok(t) => t,
-            Err(err) => {
-                logging::log_skipped_tcp_conn!(addr, err);
-                return;
+    async fn on_tcp_acception_error(&self, err: anyhow::Error) {
+        logging::log_tcp_acception_error!(err);
+
+        if let Some(err) = err.downcast_ref::<std::io::Error>() {
+            if !is_transient_error(err) {
+                // Perform sleep after non-transient errors
+                sleep(Duration::from_millis(500)).await;
             }
-        };
+        }
+    }
 
-        logging::log_opened_tcp_conn!(addr, peer_type);
+    async fn on_tcp_connection_established(&self, conn: LurkTcpConnection) {
+        let (conn_addr, conn_label) = (conn.addr(), conn.label());
+        logging::log_tcp_established_conn!(conn_addr, conn_label);
 
-        // Wrap incoming stream and create peer instance.
-        let stream_wrapper = LurkStream::new(stream);
-        let peer = LurkTcpPeer::new(stream_wrapper, addr);
-
-        // Create connection handler and supply handling of new peer in a separate thread.
-        let mut peer_handler = match peer_type {
-            LurkPeerType::SOCKS5 => LurkSocks5PeerHandler::new(peer, self.addr),
+        // Create connection handler and supply handling of particular traffic label in a separate thread.
+        let mut connection_handler = match conn.label() {
+            LurkTcpConnectionLabel::SOCKS5 => LurkSocks5Handler::new(conn, self.addr),
         };
 
         tokio::spawn(async move {
-            if let Err(err) = peer_handler.handle().await {
-                logging::log_closed_tcp_conn_with_error!(addr, err);
+            if let Err(err) = connection_handler.handle().await {
+                logging::log_tcp_closed_conn_with_error!(conn_addr, conn_label, err);
             } else {
-                logging::log_closed_tcp_conn!(addr);
+                logging::log_tcp_closed_conn!(conn_addr, conn_label);
             }
         });
     }

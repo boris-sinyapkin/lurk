@@ -58,24 +58,145 @@ pub async fn establish_tcp_connection_with_opts(endpoint: &Address, tcp_opts: &T
 
 pub mod listener {
 
+    use super::connection::{LurkTcpConnection, LurkTcpConnectionFactory, LurkTcpConnectionLabel};
     use anyhow::Result;
-    use std::net::SocketAddr;
-    use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
+    use async_listen::{backpressure, backpressure::Backpressure, ListenExt};
+    use tokio::net::{TcpListener, ToSocketAddrs};
+    use tokio_stream::{wrappers::TcpListenerStream, StreamExt};
 
     /// Custom implementation of TCP listener.
     pub struct LurkTcpListener {
-        inner: TcpListener,
+        incoming: Backpressure<TcpListenerStream>,
+        factory: LurkTcpConnectionFactory,
     }
 
     impl LurkTcpListener {
         pub async fn bind(addr: impl ToSocketAddrs) -> Result<LurkTcpListener> {
+            // Bind TCP listener.
+            let listener = TcpListener::bind(addr).await?;
+
+            // Create backpressure limit and supply the receiver to the created stream.
+            let (bp_tx, bp_rx) = backpressure::new(1000);
+            let incoming = TcpListenerStream::new(listener).apply_backpressure(bp_rx);
+
             Ok(LurkTcpListener {
-                inner: TcpListener::bind(&addr).await?,
+                incoming,
+                factory: LurkTcpConnectionFactory::new(bp_tx),
             })
         }
 
-        pub async fn accept(&self) -> Result<(TcpStream, SocketAddr)> {
-            self.inner.accept().await.map_err(anyhow::Error::from)
+        pub async fn accept(&mut self) -> Result<LurkTcpConnection> {
+            let err_msg: &str = "Incoming TCP listener should never return empty option";
+            let tcp_stream = self.incoming.next().await.expect(err_msg)?;
+            let tcp_label = LurkTcpConnectionLabel::from_tcp_stream(&tcp_stream).await?;
+            let tcp_peer_addr = tcp_stream.peer_addr()?;
+
+            Ok(self.factory.create_connection(tcp_stream, tcp_label, tcp_peer_addr))
+        }
+    }
+}
+
+pub mod connection {
+
+    use crate::{
+        common::error::LurkError,
+        io::stream::{LurkStream, LurkTcpStream},
+    };
+    use anyhow::{bail, Result};
+    use async_listen::backpressure::{Sender, Token};
+    use std::{fmt::Display, io, net::SocketAddr};
+    use tokio::net::TcpStream;
+
+    /// Label that describes the TCP connection.
+    ///
+    /// Once new TCP client is connected, ```LurkTcpListener``` peeks the stream
+    /// and checks the values inside. If the value in unknown, the connection is skipped.
+    ///
+    #[derive(Debug, Clone, Copy, PartialEq)]
+    pub enum LurkTcpConnectionLabel {
+        /// Traffic of TCP connection belongs to proxy SOCKS5 protocol
+        SOCKS5 = 0x05,
+    }
+
+    impl LurkTcpConnectionLabel {
+        /// Peeks input TCP stream and retrieves the first read byte value.
+        /// This byte is mapped to the one of known values ```LurkTcpConnectionLabel```.
+        pub async fn from_tcp_stream(tcp_stream: &TcpStream) -> Result<LurkTcpConnectionLabel> {
+            let mut buff = [0u8; 1];
+            let peeked_bytes = match tcp_stream.peek(&mut buff).await {
+                Ok(n) => n,
+                Err(err) => bail!(err),
+            };
+
+            if peeked_bytes == 1 {
+                match buff[0] {
+                    0x05 => Ok(LurkTcpConnectionLabel::SOCKS5),
+                    t => bail!(LurkError::UnknownTcpConnectionLabel(t)),
+                }
+            } else {
+                bail!(io::ErrorKind::UnexpectedEof)
+            }
+        }
+    }
+
+    impl Display for LurkTcpConnectionLabel {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match self {
+                LurkTcpConnectionLabel::SOCKS5 => write!(f, "SOCKS5"),
+            }
+        }
+    }
+
+    /// Factory that produces new TCP connection instances.
+    ///
+    /// For each new instance, factory uses backpressure 'sender' to create the token that
+    /// should be destroyed on TCP connection drop.
+    ///
+    pub struct LurkTcpConnectionFactory {
+        /// Backpressure sender instance.
+        /// This will produce tokens for created TCP connections.
+        bp_tx: Sender,
+    }
+
+    impl LurkTcpConnectionFactory {
+        pub fn new(bp_tx: Sender) -> LurkTcpConnectionFactory {
+            LurkTcpConnectionFactory { bp_tx }
+        }
+
+        pub fn create_connection(&self, tcp_stream: TcpStream, label: LurkTcpConnectionLabel, addr: SocketAddr) -> LurkTcpConnection {
+            // Wrap raw TcpStream to the stream wrapper and generate new backpressure token
+            // that must be dropped on connection destruction.
+            LurkTcpConnection {
+                stream: LurkStream::new(tcp_stream),
+                _token: self.bp_tx.token(),
+                label,
+                addr,
+            }
+        }
+    }
+
+    pub struct LurkTcpConnection {
+        /// Lurk wrapper of TcpStream
+        stream: LurkTcpStream,
+        /// Backpressure token
+        _token: Token,
+        /// Label describing traffic in this TCP connection
+        label: LurkTcpConnectionLabel,
+        /// Address of connected peer
+        addr: SocketAddr,
+    }
+
+    impl LurkTcpConnection {
+        pub fn addr(&self) -> SocketAddr {
+            self.addr
+        }
+
+        pub fn label(&self) -> LurkTcpConnectionLabel {
+            self.label
+        }
+
+        pub fn stream_mut(&mut self) -> &mut LurkTcpStream {
+            &mut self.stream
         }
     }
 }

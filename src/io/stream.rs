@@ -5,10 +5,16 @@ use std::{
     fmt::Debug,
     ops::{Deref, DerefMut},
 };
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+};
 
 #[cfg(test)]
 use mockall::mock;
+
+/// Alias for stream wrapper over `TcpStream`
+pub type LurkTcpStream = LurkStream<TcpStream>;
 
 /// Stream wrapper implementation
 
