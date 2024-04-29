@@ -20,6 +20,11 @@ pub struct LurkServer {
 }
 
 impl LurkServer {
+
+    // Delay after non-transient TCP acception failure, e.g. 
+    // handle resource exhaustion errors.
+    const DELAY_AFTER_ERROR_MILLIS: u64 = 500;
+
     pub fn new(bind_addr: SocketAddr, conn_limit: usize) -> LurkServer {
         LurkServer { bind_addr, conn_limit }
     }
@@ -42,7 +47,7 @@ impl LurkServer {
         if let Some(err) = err.downcast_ref::<std::io::Error>() {
             if !is_transient_error(err) {
                 // Perform sleep after non-transient errors
-                sleep(Duration::from_millis(500)).await;
+                sleep(Duration::from_millis(LurkServer::DELAY_AFTER_ERROR_MILLIS)).await;
             }
         }
     }
