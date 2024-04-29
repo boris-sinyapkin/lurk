@@ -25,7 +25,7 @@ impl LurkAuthenticator {
                 _ => todo!("Unsupported authentication method {:?}", method),
             },
             None => {
-                error!("Tried to authenticate {}, but method has not been selected", conn.addr());
+                error!("Tried to authenticate {}, but method has not been selected", conn.peer_addr());
                 false
             }
         }

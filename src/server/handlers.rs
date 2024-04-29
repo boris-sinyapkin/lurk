@@ -4,7 +4,10 @@ use crate::{
         error::LurkError,
         logging,
         net::{
-            tcp::{connection::LurkTcpConnection, establish_tcp_connection_with_opts, TcpConnectionOptions},
+            tcp::{
+                connection::{LurkTcpConnection, LurkTcpConnectionLabel},
+                establish_tcp_connection_with_opts, TcpConnectionOptions,
+            },
             Address,
         },
     },
@@ -19,19 +22,19 @@ use anyhow::{bail, Result};
 use human_bytes::human_bytes;
 use log::{debug, error, info};
 use socket2::TcpKeepalive;
-use std::{net::SocketAddr, time::Duration};
+use std::time::Duration;
 
 pub struct LurkSocks5Handler {
     conn: LurkTcpConnection,
-    server_address: SocketAddr,
 }
 
 impl LurkSocks5Handler {
-    pub fn new(conn: LurkTcpConnection, server_address: SocketAddr) -> LurkSocks5Handler {
-        LurkSocks5Handler { conn, server_address }
+    pub fn new(conn: LurkTcpConnection) -> LurkSocks5Handler {
+        LurkSocks5Handler { conn }
     }
 
     pub async fn handle(&mut self) -> Result<()> {
+        debug_assert_eq!(LurkTcpConnectionLabel::SOCKS5, self.conn.label(), "expected SOCKS5 label");
         // Complete handshake process and authenticate the client on success.
         self.process_handshake().await?;
         // Proceed with SOCKS5 relay handling.
@@ -61,7 +64,7 @@ impl LurkSocks5Handler {
             let error_string = err.to_string();
             let response = RelayResponse::builder()
                 .with_err(err)
-                .with_bound_address(self.server_address)
+                .with_bound_address(self.conn.local_addr())
                 .build();
 
             logging::log_request_handling_error!(self.conn, error_string, request, response);
@@ -79,7 +82,7 @@ impl LurkSocks5Handler {
 
         // Select the authentication method.
         if let Some(method) = authenticator.select_auth_method(request.auth_methods()) {
-            // debug!("Selected authentication method {:?} for {}", method, self.peer);
+            debug!("Selected authentication method {:?} for {}", method, self.conn.peer_addr());
 
             // Prepare and send the response with selected method.
             response_builder.with_auth_method(method);
@@ -89,7 +92,7 @@ impl LurkSocks5Handler {
             debug_assert!(authenticator.authenticate_connection(&self.conn));
         } else {
             // Method hasn't been selected.
-            debug!("No acceptable methods identified for for {}", self.conn.addr());
+            debug!("No acceptable methods identified for for {}", self.conn.peer_addr());
 
             // Notify client and bail out.
             response_builder.with_no_acceptable_method();
@@ -110,8 +113,8 @@ impl LurkSocks5Handler {
     }
 
     async fn process_socks5_connect(&mut self, endpoint_address: &Address) -> Result<()> {
-        let conn_addr = self.conn.addr();
-        debug!("Handling SOCKS5 CONNECT from {}", conn_addr);
+        let (conn_peer_addr, conn_bound_addr) = (self.conn.peer_addr(), self.conn.local_addr());
+        debug!("Handling SOCKS5 CONNECT from {}", conn_peer_addr);
 
         // Create TCP options.
         let mut tcp_opts = TcpConnectionOptions::new();
@@ -128,7 +131,7 @@ impl LurkSocks5Handler {
         // Respond to relay request with success.
         let response = RelayResponse::builder()
             .with_success()
-            .with_bound_address(self.server_address)
+            .with_bound_address(self.conn.local_addr())
             .build();
         self.conn.stream_mut().write_response(response).await?;
 
@@ -140,15 +143,15 @@ impl LurkSocks5Handler {
         // - R2L: endpoint <--> proxy
         let mut tunnel = LurkTunnel::new(&mut l2r, &mut r2l);
 
-        logging::log_tunnel_created!(conn_addr, self.server_address, endpoint_address);
+        logging::log_tunnel_created!(conn_peer_addr, conn_bound_addr, endpoint_address);
 
         // Start data relaying
         match tunnel.run().await {
             Ok((l2r, r2l)) => {
-                logging::log_tunnel_closed!(conn_addr, self.server_address, endpoint_address, l2r, r2l);
+                logging::log_tunnel_closed!(conn_peer_addr, conn_bound_addr, endpoint_address, l2r, r2l);
             }
             Err(err) => {
-                logging::log_tunnel_closed_with_error!(conn_addr, self.server_address, endpoint_address, err);
+                logging::log_tunnel_closed_with_error!(conn_peer_addr, conn_bound_addr, endpoint_address, err);
             }
         }
 

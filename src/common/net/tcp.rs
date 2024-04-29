@@ -72,9 +72,9 @@ pub mod listener {
 
     impl LurkTcpListener {
         /// Binds TCP listener to passed `addr`.
-        /// 
-        /// Argument `conn_limit` sets the limit of open TCP connections. Thus accepting of new connections 
-        /// on returned `LurkTcpListener` will be paused, when number  of open TCP connections will reach 
+        ///
+        /// Argument `conn_limit` sets the limit of open TCP connections. Thus accepting of new connections
+        /// on returned `LurkTcpListener` will be paused, when number of open TCP connections will reach
         /// the `conn_limit`.
         pub async fn bind(addr: impl ToSocketAddrs, conn_limit: usize) -> Result<LurkTcpListener> {
             // Bind TCP listener.
@@ -94,9 +94,8 @@ pub mod listener {
             let err_msg: &str = "Incoming TCP listener should never return empty option";
             let tcp_stream = self.incoming.next().await.expect(err_msg)?;
             let tcp_label = LurkTcpConnectionLabel::from_tcp_stream(&tcp_stream).await?;
-            let tcp_peer_addr = tcp_stream.peer_addr()?;
 
-            Ok(self.factory.create_connection(tcp_stream, tcp_label, tcp_peer_addr))
+            self.factory.create_connection(tcp_stream, tcp_label)
         }
     }
 }
@@ -168,15 +167,16 @@ pub mod connection {
             LurkTcpConnectionFactory { bp_tx }
         }
 
-        pub fn create_connection(&self, tcp_stream: TcpStream, label: LurkTcpConnectionLabel, addr: SocketAddr) -> LurkTcpConnection {
+        pub fn create_connection(&self, tcp_stream: TcpStream, label: LurkTcpConnectionLabel) -> Result<LurkTcpConnection> {
             // Wrap raw TcpStream to the stream wrapper and generate new backpressure token
             // that must be dropped on connection destruction.
-            LurkTcpConnection {
+            Ok(LurkTcpConnection {
+                peer_addr: tcp_stream.peer_addr()?,
+                local_addr: tcp_stream.local_addr()?,
                 stream: LurkStream::new(tcp_stream),
                 _token: self.bp_tx.token(),
                 label,
-                addr,
-            }
+            })
         }
     }
 
@@ -187,13 +187,19 @@ pub mod connection {
         _token: Token,
         /// Label describing traffic in this TCP connection
         label: LurkTcpConnectionLabel,
-        /// Address of connected peer
-        addr: SocketAddr,
+        /// Remote address that this connection is connected to
+        peer_addr: SocketAddr,
+        /// Local address that this connection is bound to
+        local_addr: SocketAddr,
     }
 
     impl LurkTcpConnection {
-        pub fn addr(&self) -> SocketAddr {
-            self.addr
+        pub fn peer_addr(&self) -> SocketAddr {
+            self.peer_addr
+        }
+
+        pub fn local_addr(&self) -> SocketAddr {
+            self.local_addr
         }
 
         pub fn label(&self) -> LurkTcpConnectionLabel {

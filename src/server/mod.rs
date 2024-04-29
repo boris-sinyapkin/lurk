@@ -53,19 +53,19 @@ impl LurkServer {
     }
 
     async fn on_tcp_connection_established(&self, conn: LurkTcpConnection) {
-        let (conn_addr, conn_label) = (conn.addr(), conn.label());
-        logging::log_tcp_established_conn!(conn_addr, conn_label);
+        let (conn_peer_addr, conn_label) = (conn.peer_addr(), conn.label());
+        logging::log_tcp_established_conn!(conn_peer_addr, conn_label);
 
         // Create connection handler and supply handling of particular traffic label in a separate thread.
         let mut connection_handler = match conn.label() {
-            LurkTcpConnectionLabel::SOCKS5 => LurkSocks5Handler::new(conn, self.bind_addr),
+            LurkTcpConnectionLabel::SOCKS5 => LurkSocks5Handler::new(conn),
         };
 
         tokio::spawn(async move {
             if let Err(err) = connection_handler.handle().await {
-                logging::log_tcp_closed_conn_with_error!(conn_addr, conn_label, err);
+                logging::log_tcp_closed_conn_with_error!(conn_peer_addr, conn_label, err);
             } else {
-                logging::log_tcp_closed_conn!(conn_addr, conn_label);
+                logging::log_tcp_closed_conn!(conn_peer_addr, conn_label);
             }
         });
     }

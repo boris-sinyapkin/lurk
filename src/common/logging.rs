@@ -51,7 +51,7 @@ macro_rules! log_request_handling_error {
             \n\t\trequest : '{:?}' \
             \n\t\tresponse: '{:?}' \
             \n",
-            $conn.addr(),
+            $conn.peer_addr(),
             $err,
             $req,
             $resp
