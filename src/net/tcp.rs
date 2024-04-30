@@ -66,6 +66,7 @@ pub mod listener {
     use tokio_stream::{wrappers::TcpListenerStream, StreamExt};
 
     /// Custom implementation of TCP listener.
+    #[allow(dead_code)]
     pub struct LurkTcpListener {
         incoming: Backpressure<TcpListenerStream>,
         factory: LurkTcpConnectionFactory,
@@ -104,8 +105,72 @@ pub mod listener {
         }
 
         /// Returns local address that this listener is binded to.
+        #[allow(dead_code)]
         pub fn local_addr(&self) -> SocketAddr {
             self.local_addr
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+
+        use super::*;
+        use futures::{stream::FuturesUnordered, TryFutureExt};
+        use std::time::Duration;
+        use tokio::{
+            io::AsyncWriteExt,
+            net::TcpStream,
+            time::{sleep, timeout},
+        };
+
+        // :0 tells the OS to pick an open port.
+        const TEST_BIND_IPV4: &str = "127.0.0.1:0";
+
+        /// This tests backpressure limit set on listener.
+        /// Number of connections intentionally exceeds the limit. Thus listener
+        /// should put on hold some of them and handle only allowed number of
+        /// them in parallel.
+        #[tokio::test]
+
+        async fn limit_tcp_connections() {
+            let conn_limit = 5;
+            let num_clients = 20;
+
+            let mut listener = LurkTcpListener::bind(TEST_BIND_IPV4, 5).await.expect("Expect binded listener");
+            let listener_addr = listener.local_addr();
+
+            let client_tasks: FuturesUnordered<_> = (0..num_clients)
+                .map(|_| async move {
+                    TcpStream::connect(listener_addr)
+                        .and_then(|mut s| async move { s.write_all(&[0x05]).await })
+                        .await
+                        .unwrap()
+                })
+                .collect();
+
+            // Await all clients to complete.
+            client_tasks.collect::<()>().await;
+
+            // We have to handle all clients, but only `conn_limit`
+            // could be handled in parallel.
+            for _ in 0..num_clients {
+                let conn = timeout(Duration::from_secs(2), listener.accept())
+                    .await
+                    .expect("Expect accepted TCP connection");
+
+                assert!(
+                    listener.factory.get_active_tokens() <= conn_limit,
+                    "Number of opened connections must not exceed the limit"
+                );
+
+                tokio::spawn(async move {
+                    // Some client handling ...
+                    sleep(Duration::from_millis(300)).await;
+                    // Drop the connection after sleep, hence one
+                    // slot should become available for the next client
+                    drop(conn)
+                });
+            }
         }
     }
 }
@@ -175,6 +240,12 @@ pub mod connection {
     impl LurkTcpConnectionFactory {
         pub fn new(bp_tx: Sender) -> LurkTcpConnectionFactory {
             LurkTcpConnectionFactory { bp_tx }
+        }
+
+        /// Returns the number of currently active tokens.
+        #[allow(dead_code)]
+        pub fn get_active_tokens(&self) -> usize {
+            self.bp_tx.get_active_tokens()
         }
 
         pub fn create_connection(&self, tcp_stream: TcpStream, label: LurkTcpConnectionLabel) -> Result<LurkTcpConnection> {
