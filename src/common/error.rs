@@ -1,4 +1,4 @@
-use crate::proto::socks5::Command;
+use crate::{auth::LurkAuthMethod, proto::socks5::Command};
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
@@ -9,10 +9,10 @@ pub enum LurkError {
     DomainNameDecodingFailed(std::string::FromUtf8Error),
     #[error("SOCKS command {0:?} is not supported")]
     UnsupportedSocksCommand(Command),
+    #[error("Unsupported authentication method {0:?}")]
+    UnsupportedAuthMethod(LurkAuthMethod),
     #[error("unable to resolve domain name {0}")]
     UnresolvedDomainName(String),
-    #[error("unable to select appropriate authentication method")]
-    NoAcceptableAuthMethod,
     #[error("Unknown TCP connection label {0:#04x}")]
     UnknownTcpConnectionLabel(u8),
 }

@@ -45,11 +45,29 @@ impl LurkSocks5Handler {
     async fn process_handshake(&mut self) -> Result<()> {
         let request = self.conn.stream_mut().read_request::<HandshakeRequest>().await?;
 
-        if let Err(err) = self.process_handshake_impl(&request).await {
-            logging::log_request_handling_error!(self.conn, err, request, ());
-        }
+        // Authenticator will select method among all stored in request
+        // and authenticate the connection on success.
+        let mut authenticator = LurkAuthenticator::new();
+        // Prepare builder for the response on handshake request.
+        let mut response_builder = HandshakeResponse::builder();
 
-        Ok(())
+        match authenticator.select_auth_method(request.auth_methods()) {
+            Some(method) => {
+                debug!("Selected authentication method {:?} for {}", method, self.conn.peer_addr());
+                // Respond to the client with selected method.
+                response_builder.with_auth_method(method);
+                self.conn.stream_mut().write_response(response_builder.build()).await?;
+                // Authenticate the client by using selected method.
+                // Note: Currently, only None method (disabled auth) is supported,
+                // so just a sanity check here.
+                authenticator.authenticate_connection(&self.conn)
+            }
+            None => {
+                debug!("No acceptable methods identified for {}", self.conn.peer_addr());
+                response_builder.with_no_acceptable_method();
+                self.conn.stream_mut().write_response(response_builder.build()).await
+            }
+        }
     }
 
     /// Handling SOCKS5 command which comes in relay request from client.
@@ -66,36 +84,6 @@ impl LurkSocks5Handler {
 
             logging::log_request_handling_error!(self.conn, error_string, request, response);
             self.conn.stream_mut().write_response(response).await?
-        }
-
-        Ok(())
-    }
-
-    async fn process_handshake_impl(&mut self, request: &HandshakeRequest) -> Result<()> {
-        // Create authenticator.
-        let mut authenticator = LurkAuthenticator::new();
-        // Create response builder.
-        let mut response_builder = HandshakeResponse::builder();
-
-        // Select the authentication method.
-        if let Some(method) = authenticator.select_auth_method(request.auth_methods()) {
-            debug!("Selected authentication method {:?} for {}", method, self.conn.peer_addr());
-
-            // Prepare and send the response with selected method.
-            response_builder.with_auth_method(method);
-            self.conn.stream_mut().write_response(response_builder.build()).await?;
-
-            // Authenticate the client.
-            debug_assert!(authenticator.authenticate_connection(&self.conn));
-        } else {
-            // Method hasn't been selected.
-            debug!("No acceptable methods identified for {}", self.conn.peer_addr());
-
-            // Notify client and bail out.
-            response_builder.with_no_acceptable_method();
-            self.conn.stream_mut().write_response(response_builder.build()).await?;
-
-            bail!(LurkError::NoAcceptableAuthMethod)
         }
 
         Ok(())

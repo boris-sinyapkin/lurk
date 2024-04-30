@@ -1,5 +1,5 @@
-use crate::net::tcp::connection::LurkTcpConnection;
-use log::error;
+use crate::{common::error::LurkError, net::tcp::connection::LurkTcpConnection};
+use anyhow::{bail, Result};
 use std::collections::HashSet;
 
 #[repr(u8)]
@@ -27,15 +27,14 @@ impl LurkAuthenticator {
         }
     }
 
-    pub fn authenticate_connection(&self, conn: &LurkTcpConnection) -> bool {
+    pub fn authenticate_connection(&self, conn: &LurkTcpConnection) -> Result<()> {
         match self.current_method() {
             Some(method) => match method {
-                LurkAuthMethod::None => true,
-                _ => todo!("Unsupported authentication method {:?}", method),
+                LurkAuthMethod::None => Ok(()),
+                _ => bail!(LurkError::UnsupportedAuthMethod(method)),
             },
             None => {
-                error!("Tried to authenticate {}, but method has not been selected", conn.peer_addr());
-                false
+                bail!("Tried to authenticate {}, but method has not been selected", conn.peer_addr());
             }
         }
     }
