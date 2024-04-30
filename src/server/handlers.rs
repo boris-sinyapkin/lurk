@@ -89,7 +89,7 @@ impl LurkSocks5Handler {
             debug_assert!(authenticator.authenticate_connection(&self.conn));
         } else {
             // Method hasn't been selected.
-            debug!("No acceptable methods identified for for {}", self.conn.peer_addr());
+            debug!("No acceptable methods identified for {}", self.conn.peer_addr());
 
             // Notify client and bail out.
             response_builder.with_no_acceptable_method();

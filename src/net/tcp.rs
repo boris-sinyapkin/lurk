@@ -61,6 +61,7 @@ pub mod listener {
     use super::connection::{LurkTcpConnection, LurkTcpConnectionFactory, LurkTcpConnectionLabel};
     use anyhow::Result;
     use async_listen::{backpressure, backpressure::Backpressure, ListenExt};
+    use std::net::SocketAddr;
     use tokio::net::{TcpListener, ToSocketAddrs};
     use tokio_stream::{wrappers::TcpListenerStream, StreamExt};
 
@@ -68,6 +69,7 @@ pub mod listener {
     pub struct LurkTcpListener {
         incoming: Backpressure<TcpListenerStream>,
         factory: LurkTcpConnectionFactory,
+        local_addr: SocketAddr,
     }
 
     impl LurkTcpListener {
@@ -79,6 +81,7 @@ pub mod listener {
         pub async fn bind(addr: impl ToSocketAddrs, conn_limit: usize) -> Result<LurkTcpListener> {
             // Bind TCP listener.
             let listener = TcpListener::bind(addr).await?;
+            let local_addr = listener.local_addr()?;
 
             // Create backpressure limit and supply the receiver to the created stream.
             let (bp_tx, bp_rx) = backpressure::new(conn_limit);
@@ -87,15 +90,22 @@ pub mod listener {
             Ok(LurkTcpListener {
                 incoming,
                 factory: LurkTcpConnectionFactory::new(bp_tx),
+                local_addr,
             })
         }
 
+        /// Accept incoming TCP connection.
         pub async fn accept(&mut self) -> Result<LurkTcpConnection> {
             let err_msg: &str = "Incoming TCP listener should never return empty option";
             let tcp_stream = self.incoming.next().await.expect(err_msg)?;
             let tcp_label = LurkTcpConnectionLabel::from_tcp_stream(&tcp_stream).await?;
 
             self.factory.create_connection(tcp_stream, tcp_label)
+        }
+
+        /// Returns local address that this listener is binded to.
+        pub fn local_addr(&self) -> SocketAddr {
+            self.local_addr
         }
     }
 }
@@ -208,6 +218,64 @@ pub mod connection {
 
         pub fn stream_mut(&mut self) -> &mut LurkTcpStream {
             &mut self.stream
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+
+        use super::*;
+        use futures::TryFutureExt;
+        use tokio::{io::AsyncWriteExt, net::TcpListener};
+
+        // :0 tells the OS to pick an open port.
+        const TEST_BIND_IPV4: &str = "127.0.0.1:0";
+
+        #[tokio::test]
+        async fn extract_tcp_conn_label() {
+            // :0 tells the OS to pick an open port.
+            let listener = TcpListener::bind(TEST_BIND_IPV4).await.expect("Expect binded listener");
+            let addr = listener.local_addr().unwrap();
+
+            {
+                // Write known label (SOCKS5)
+                TcpStream::connect(addr)
+                    .and_then(|mut s| async move { s.write_all(&[0x05]).await })
+                    .await
+                    .unwrap();
+            }
+
+            listener
+                .accept()
+                .and_then(|(s, _)| async move {
+                    let label = LurkTcpConnectionLabel::from_tcp_stream(&s).await.unwrap();
+                    assert_eq!(LurkTcpConnectionLabel::SOCKS5, label);
+                    Ok(())
+                })
+                .await
+                .unwrap();
+
+            {
+                // Write unknown label
+                TcpStream::connect(addr)
+                    .and_then(|mut s| async move { s.write_all(&[0xFF]).await })
+                    .await
+                    .unwrap();
+            }
+
+            listener
+                .accept()
+                .and_then(|(s, _)| async move {
+                    let err = LurkTcpConnectionLabel::from_tcp_stream(&s)
+                        .await
+                        .expect_err("Expected Lurk error")
+                        .downcast::<LurkError>()
+                        .unwrap();
+                    assert_eq!(LurkError::UnknownTcpConnectionLabel(0xFF), err);
+                    Ok(())
+                })
+                .await
+                .unwrap();
         }
     }
 }

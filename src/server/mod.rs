@@ -20,8 +20,8 @@ pub struct LurkServer {
 }
 
 impl LurkServer {
-    // Delay after non-transient TCP acception failure, e.g.
-    // handle resource exhaustion errors.
+    /// Delay after non-transient TCP acception failure, e.g.
+    /// handle resource exhaustion errors.
     const DELAY_AFTER_ERROR_MILLIS: u64 = 500;
 
     pub fn new(bind_addr: SocketAddr, conn_limit: usize) -> LurkServer {
