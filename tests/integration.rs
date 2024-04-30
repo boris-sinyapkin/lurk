@@ -15,7 +15,7 @@ async fn http_server_single_client() {
     let http_server_addr = "127.0.0.1:32002".parse::<SocketAddr>().unwrap();
 
     // Run proxy
-    let lurk_handle = common::spawn_lurk_server(lurk_server_addr).await;
+    let lurk_handle = common::spawn_lurk_server(lurk_server_addr, 1024).await;
 
     // Run HTTP server in the background
     let http_server = ServerBuilder::new()
@@ -49,13 +49,13 @@ async fn http_server_single_client() {
 async fn echo_server_multiple_clients() {
     common::init_logging();
 
-    let num_clients = 5;
+    let num_clients = 100;
     let generated_data_len = 1024;
     let lurk_server_addr = "127.0.0.1:32003".parse::<SocketAddr>().unwrap();
     let echo_server_addr = "127.0.0.1:32004".parse::<SocketAddr>().unwrap();
 
     // Run Lurk proxy.
-    let lurk_handle = common::spawn_lurk_server(lurk_server_addr).await;
+    let lurk_handle = common::spawn_lurk_server(lurk_server_addr, 1024).await;
 
     // Run echo server. Data sent to this server will be proxied through Lurk
     // instance spawned above.

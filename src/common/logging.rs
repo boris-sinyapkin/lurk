@@ -40,10 +40,10 @@ pub(crate) use log_tunnel_closed;
 pub(crate) use log_tunnel_closed_with_error;
 pub(crate) use log_tunnel_created;
 
-// Error handling
+// 'Request' error handling
 
 macro_rules! log_request_handling_error {
-    ($peer:expr, $err:expr, $req:expr, $resp:expr) => {
+    ($conn:expr, $err:expr, $req:expr, $resp:expr) => {
         error!(
             "\n\n\tError occured during REQUEST handling: \
             \n\t\tpeer: '{}' \
@@ -51,40 +51,51 @@ macro_rules! log_request_handling_error {
             \n\t\trequest : '{:?}' \
             \n\t\tresponse: '{:?}' \
             \n",
-            $peer, $err, $req, $resp
+            $conn.peer_addr(),
+            $err,
+            $req,
+            $resp
         )
     };
 }
 
-macro_rules! log_closed_tcp_conn_with_error {
-    ($peer:expr, $err:expr) => {
+// TCP
+
+macro_rules! log_tcp_closed_conn_with_error {
+    ($conn_addr:expr, $conn_label:expr, $err:expr) => {
         error!(
-            "\n\n\tTCP connection with {} has been CLOSED with ERROR: \
+            "\n\n\tTCP {} connection has been CLOSED with ERROR: \
+            \n\t\tpeer: '{}' \
             \n\t\treason: '{}' \
             \n",
-            $peer, $err
+            $conn_label, $conn_addr, $err
         )
     };
 }
 
-macro_rules! log_closed_tcp_conn {
-    ($peer:expr) => {
-        info!("TCP connection with {} has been CLOSED", $peer)
-    };
-}
-
-macro_rules! log_opened_tcp_conn {
-    ($addr:expr, $peer_type:expr) => {
+macro_rules! log_tcp_closed_conn {
+    ($conn_addr:expr, $conn_label:expr) => {
         info!(
-            "\n\n\tTCP connection with {} has been OPENED: \
-            \n\t\ttype: '{}' \
+            "\n\n\tTCP {} connection has been CLOSED: \
+            \n\t\tpeer: '{}' \
             \n",
-            $addr, $peer_type
+            $conn_label, $conn_addr,
         )
     };
 }
 
-macro_rules! log_failed_tcp_conn_acception {
+macro_rules! log_tcp_established_conn {
+    ($conn_addr:expr, $conn_label:expr) => {
+        info!(
+            "\n\n\tTCP {} connection has been OPENED: \
+            \n\t\tpeer: '{}' \
+            \n",
+            $conn_label, $conn_addr,
+        )
+    };
+}
+
+macro_rules! log_tcp_acception_error {
     ($err:expr) => {
         warn!(
             "\n\n\tTCP connection was NOT ACCEPTED: \
@@ -95,20 +106,9 @@ macro_rules! log_failed_tcp_conn_acception {
     };
 }
 
-macro_rules! log_skipped_tcp_conn {
-    ($addr:expr, $reason:expr) => {
-        info!(
-            "\n\n\tTCP connection with {} has been SKIPPED: \
-            \n\t\treason: '{}' \
-            \n",
-            $addr, $reason
-        )
-    };
-}
+pub(crate) use log_tcp_acception_error;
+pub(crate) use log_tcp_closed_conn;
+pub(crate) use log_tcp_closed_conn_with_error;
+pub(crate) use log_tcp_established_conn;
 
-pub(crate) use log_closed_tcp_conn;
-pub(crate) use log_closed_tcp_conn_with_error;
-pub(crate) use log_failed_tcp_conn_acception;
-pub(crate) use log_opened_tcp_conn;
 pub(crate) use log_request_handling_error;
-pub(crate) use log_skipped_tcp_conn;

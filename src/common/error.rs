@@ -12,7 +12,9 @@ pub enum LurkError {
     #[error("unable to resolve domain name {0}")]
     UnresolvedDomainName(String),
     #[error("unable to select appropriate authentication method")]
-    NoAcceptableAuthMethod
+    NoAcceptableAuthMethod,
+    #[error("Unknown TCP connection label {0:#04x}")]
+    UnknownTcpConnectionLabel(u8),
 }
 
 #[derive(Error, Debug, PartialEq)]

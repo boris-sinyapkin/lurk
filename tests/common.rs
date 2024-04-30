@@ -5,7 +5,8 @@ use reqwest::Proxy;
 use std::{net::SocketAddr, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{TcpListener, TcpStream}, time::sleep,
+    net::{TcpListener, TcpStream},
+    time::sleep,
 };
 
 pub fn init_logging() {
@@ -13,9 +14,14 @@ pub fn init_logging() {
 }
 
 /// Spawn Lurk proxy instance.
-pub async fn spawn_lurk_server(addr: SocketAddr) -> tokio::task::JoinHandle<()> {
+pub async fn spawn_lurk_server(addr: SocketAddr, tcp_conn_limit: usize) -> tokio::task::JoinHandle<()> {
     // Run proxy
-    let handle = tokio::spawn(async move { LurkServer::new(addr).run().await.expect("Error during proxy server run") });
+    let handle = tokio::spawn(async move {
+        LurkServer::new(addr, tcp_conn_limit)
+            .run()
+            .await
+            .expect("Error during proxy server run")
+    });
 
     // Yeild execution untill server binds
     tokio::task::yield_now().await;
@@ -103,7 +109,7 @@ mod utils {
 
     use rand::Rng;
 
-    pub fn assert_eq_vectors<T: Eq + Debug>(expected: &Vec<T>, actual: &Vec<T>) {
+    pub fn assert_eq_vectors<T: Eq + Debug>(expected: &[T], actual: &[T]) {
         let matching = expected
             .iter()
             .zip(actual)

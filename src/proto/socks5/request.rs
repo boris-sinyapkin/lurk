@@ -1,11 +1,6 @@
 use super::{Address, Command};
-use crate::{
-    common::{error::InvalidValue, LurkAuthMethod},
-    io::LurkRequest,
-    proto::socks5::consts,
-};
+use crate::{auth::LurkAuthMethod, common::error::InvalidValue, io::LurkRequest, proto::socks5::consts};
 use anyhow::{ensure, Result};
-use cfg_if::cfg_if;
 use std::collections::HashSet;
 use tokio::io::AsyncReadExt;
 
@@ -23,12 +18,10 @@ pub struct HandshakeRequest {
 }
 
 impl HandshakeRequest {
-    cfg_if! {
-        if #[cfg(test)] {
-            pub fn new(auth_methods: HashSet<LurkAuthMethod>) -> HandshakeRequest {
-                HandshakeRequest { auth_methods }
-            }
-        }
+    #[cfg(test)]
+    #[allow(dead_code)]
+    pub fn new(auth_methods: HashSet<LurkAuthMethod>) -> HandshakeRequest {
+        HandshakeRequest { auth_methods }
     }
 
     pub fn auth_methods(&self) -> &HashSet<LurkAuthMethod> {

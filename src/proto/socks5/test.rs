@@ -1,10 +1,8 @@
 use crate::{
-    common::{
-        error::{InvalidValue, LurkError},
-        net::ipv4_socket_address,
-        LurkAuthMethod,
-    },
+    auth::LurkAuthMethod,
+    common::error::{InvalidValue, LurkError},
     io::{LurkRequest, LurkResponse},
+    net::ipv4_socket_address,
     proto::socks5::{
         consts::*,
         request::{HandshakeRequest, RelayRequest},

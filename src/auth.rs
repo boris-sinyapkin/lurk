@@ -1,14 +1,15 @@
-use super::LurkPeer;
-use crate::{
-    common::LurkAuthMethod,
-    io::{LurkRequestRead, LurkResponseWrite},
-};
+use crate::net::tcp::connection::LurkTcpConnection;
 use log::error;
-use std::{
-    collections::HashSet,
-    ops::{Deref, DerefMut},
-};
-use tokio::io::{AsyncRead, AsyncWrite};
+use std::collections::HashSet;
+
+#[repr(u8)]
+#[rustfmt::skip]
+#[derive(Debug, PartialEq, Eq, Hash, Clone, Copy)]
+pub enum LurkAuthMethod {
+    None,
+    GssAPI,
+    Password,
+}
 
 pub struct LurkAuthenticator {
     available_methods: HashSet<LurkAuthMethod>,
@@ -26,18 +27,14 @@ impl LurkAuthenticator {
         }
     }
 
-    pub fn authenticate<S>(&self, peer: &LurkPeer<S>) -> bool
-    where
-        S: LurkRequestRead + LurkResponseWrite + Unpin + DerefMut,
-        <S as Deref>::Target: AsyncRead + AsyncWrite + Unpin,
-    {
+    pub fn authenticate_connection(&self, conn: &LurkTcpConnection) -> bool {
         match self.current_method() {
             Some(method) => match method {
                 LurkAuthMethod::None => true,
                 _ => todo!("Unsupported authentication method {:?}", method),
             },
             None => {
-                error!("Tried to authenticate {peer:}, but method has not been selected");
+                error!("Tried to authenticate {}, but method has not been selected", conn.peer_addr());
                 false
             }
         }

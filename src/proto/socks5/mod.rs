@@ -4,10 +4,10 @@
 /// RFC 1928
 /// https://datatracker.ietf.org/doc/html/rfc1928#ref-1
 ///
-use crate::common::{
-    error::{InvalidValue, LurkError},
+use crate::{
+    auth::LurkAuthMethod,
+    common::error::{InvalidValue, LurkError},
     net::Address,
-    LurkAuthMethod,
 };
 use anyhow::{bail, Result};
 use bytes::BufMut;
