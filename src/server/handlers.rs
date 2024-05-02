@@ -146,37 +146,97 @@ impl LurkSocks5Handler {
 
 #[cfg(test)]
 mod tests {
-    // use super::*;
-    // use crate::{common::LurkAuthMethod, io::stream::MockLurkStreamWrapper, proto::socks5::response::HandshakeResponse};
-    // use mockall::predicate;
-    // use std::{
-    //     collections::HashSet,
-    //     net::{IpAddr, Ipv4Addr},
-    // };
-    // use tokio_test::io::Mock;
 
-    // #[tokio::test]
-    // async fn socks5_handshake() {
-    //     let addr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8080);
-    //     let mut stream = MockLurkStreamWrapper::<Mock>::new();
+    use super::*;
+    use crate::{auth::LurkAuthMethod, net::tcp::listener::LurkTcpListener};
+    use futures::TryFutureExt;
+    use pretty_assertions::assert_eq;
+    use std::collections::HashSet;
+    use tokio::net::TcpStream;
+    use tokio_test::assert_ok;
 
-    //     let peer_methods = [LurkAuthMethod::None, LurkAuthMethod::GssAPI];
-    //     let agreed_method = LurkAuthMethod::None;
+    // :0 tells the OS to pick an open port.
+    const TEST_BIND_IPV4: &str = "127.0.0.1:0";
+    const TEST_CONN_LIMIT: usize = 1024;
 
-    //     stream
-    //         .expect_read_request()
-    //         .once()
-    //         .returning(move || Ok(HandshakeRequest::new(HashSet::from(peer_methods))));
+    #[tokio::test]
+    async fn socks5_handshake_with_auth_method() {
+        let mut listener = LurkTcpListener::bind(TEST_BIND_IPV4, TEST_CONN_LIMIT)
+            .await
+            .expect("Expect binded listener");
 
-    //     stream
-    //         .expect_write_response()
-    //         .once()
-    //         .with(predicate::eq(HandshakeResponse::builder().with_auth_method(agreed_method).build()))
-    //         .returning(|_| Ok(()));
+        let listener_addr = listener.local_addr();
+        let client_handle = tokio::spawn(async move {
+            TcpStream::connect(listener_addr)
+                .and_then(|mut s| async move {
+                    // Send handshake request with auth methods.
+                    HandshakeRequest::new(HashSet::from([
+                        LurkAuthMethod::None,
+                        LurkAuthMethod::GssAPI,
+                        LurkAuthMethod::Password,
+                    ]))
+                    .write_to(&mut s)
+                    .await;
 
-    //     let conn = LurkTcpConnection::new(stream, addr);
-    //     let mut socks5_handler = LurkSocks5Handler::new(peer, "127.0.0.1:666".parse().unwrap());
+                    // Read and verify handshake response.
+                    let actual = HandshakeResponse::read_from(&mut s).await;
+                    let reference = HandshakeResponse::builder().with_auth_method(LurkAuthMethod::None).build();
 
-    //     socks5_handler.process_handshake().await.unwrap();
-    // }
+                    assert_eq!(reference, actual);
+                    Ok(())
+                })
+                .await
+                .unwrap()
+        });
+
+        tokio::task::yield_now().await;
+
+        let conn = listener.accept().await.expect("Expect created connection");
+        assert_eq!(LurkTcpConnectionLabel::SOCKS5, conn.label());
+
+        let mut handler = LurkSocks5Handler::new(conn);
+        assert_ok!(handler.process_handshake().await);
+
+        assert_ok!(client_handle.into_future().await);
+    }
+
+    #[tokio::test]
+    async fn socks5_handshake_with_non_accepatable_method() {
+        let mut listener = LurkTcpListener::bind(TEST_BIND_IPV4, TEST_CONN_LIMIT)
+            .await
+            .expect("Expect binded listener");
+
+        let listener_addr = listener.local_addr();
+        let client_handle = tokio::spawn(async move {
+            TcpStream::connect(listener_addr)
+                .and_then(|mut s| async move {
+                    // Send handshake request with auth methods.
+                    HandshakeRequest::new(HashSet::from([
+                        LurkAuthMethod::GssAPI,
+                        LurkAuthMethod::Password,
+                    ]))
+                    .write_to(&mut s)
+                    .await;
+
+                    // Read and verify handshake response.
+                    let actual = HandshakeResponse::read_from(&mut s).await;
+                    let reference = HandshakeResponse::builder().with_no_acceptable_method().build();
+
+                    assert_eq!(reference, actual);
+                    Ok(())
+                })
+                .await
+                .unwrap()
+        });
+
+        tokio::task::yield_now().await;
+
+        let conn = listener.accept().await.expect("Expect created connection");
+        assert_eq!(LurkTcpConnectionLabel::SOCKS5, conn.label());
+
+        let mut handler = LurkSocks5Handler::new(conn);
+        assert_ok!(handler.process_handshake().await);
+
+        assert_ok!(client_handle.into_future().await);
+    }
 }

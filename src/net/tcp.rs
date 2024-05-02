@@ -156,8 +156,10 @@ pub mod listener {
             for _ in 0..num_clients {
                 let conn = timeout(Duration::from_secs(2), listener.accept())
                     .await
+                    .expect("Expect acceptied connection before expired timeout")
                     .expect("Expect accepted TCP connection");
 
+                assert_eq!(LurkTcpConnectionLabel::SOCKS5, conn.label());
                 assert!(
                     listener.factory.get_active_tokens() <= conn_limit,
                     "Number of opened connections must not exceed the limit"
@@ -251,13 +253,7 @@ pub mod connection {
         pub fn create_connection(&self, tcp_stream: TcpStream, label: LurkTcpConnectionLabel) -> Result<LurkTcpConnection> {
             // Wrap raw TcpStream to the stream wrapper and generate new backpressure token
             // that must be dropped on connection destruction.
-            Ok(LurkTcpConnection {
-                peer_addr: tcp_stream.peer_addr()?,
-                local_addr: tcp_stream.local_addr()?,
-                stream: LurkStream::new(tcp_stream),
-                _token: self.bp_tx.token(),
-                label,
-            })
+            LurkTcpConnection::new(tcp_stream, label, self.bp_tx.token())
         }
     }
 
@@ -275,6 +271,16 @@ pub mod connection {
     }
 
     impl LurkTcpConnection {
+        fn new(tcp_stream: TcpStream, label: LurkTcpConnectionLabel, token: Token) -> Result<LurkTcpConnection> {
+            Ok(LurkTcpConnection {
+                peer_addr: tcp_stream.peer_addr()?,
+                local_addr: tcp_stream.local_addr()?,
+                stream: LurkStream::new(tcp_stream),
+                _token: token,
+                label,
+            })
+        }
+
         pub fn peer_addr(&self) -> SocketAddr {
             self.peer_addr
         }

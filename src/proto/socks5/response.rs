@@ -6,6 +6,9 @@ use log::error;
 use std::net::SocketAddr;
 use tokio::io::AsyncWriteExt;
 
+#[cfg(test)]
+use tokio::io::AsyncReadExt;
+
 // The server selects from one of the methods given in METHODS, and
 // sends a METHOD selection message:
 // +----+--------+
@@ -22,6 +25,15 @@ pub struct HandshakeResponse {
 impl HandshakeResponse {
     pub fn builder() -> HandshakeResponseBuilder {
         HandshakeResponseBuilder { method: None }
+    }
+
+    #[cfg(test)]
+    pub async fn read_from<T: AsyncReadExt + Unpin>(stream: &mut T) -> HandshakeResponse {
+        let mut header: [u8; 2] = [0, 0];
+        stream.read_exact(&mut header).await.unwrap();
+
+        assert!(header[0] == consts::SOCKS5_VERSION);
+        HandshakeResponse { method: header[1] }
     }
 }
 
