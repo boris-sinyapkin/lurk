@@ -149,7 +149,7 @@ impl LurkSocks5Handler {
 mod tests {
 
     use super::*;
-    use crate::{auth::LurkAuthMethod, net::tcp::listener::LurkTcpListener};
+    use crate::{auth::LurkAuthMethod, common::assertions::assert_lurk_err, net::tcp::listener::LurkTcpListener};
     use futures::TryFutureExt;
     use pretty_assertions::assert_eq;
     use std::collections::HashSet;
@@ -212,12 +212,9 @@ mod tests {
             TcpStream::connect(listener_addr)
                 .and_then(|mut s| async move {
                     // Send handshake request with auth methods.
-                    HandshakeRequest::new(HashSet::from([
-                        LurkAuthMethod::GssAPI,
-                        LurkAuthMethod::Password,
-                    ]))
-                    .write_to(&mut s)
-                    .await;
+                    HandshakeRequest::new(HashSet::from([LurkAuthMethod::GssAPI, LurkAuthMethod::Password]))
+                        .write_to(&mut s)
+                        .await;
 
                     // Read and verify handshake response.
                     let actual = HandshakeResponse::read_from(&mut s).await;
@@ -236,7 +233,10 @@ mod tests {
         assert_eq!(LurkTcpConnectionLabel::SOCKS5, conn.label());
 
         let mut handler = LurkSocks5Handler::new(conn);
-        assert_ok!(handler.process_handshake().await);
+        assert_lurk_err!(
+            LurkError::NoAcceptableAuthenticationMethod,
+            handler.process_handshake().await.expect_err("Expect error")
+        );
 
         assert_ok!(client_handle.into_future().await);
     }

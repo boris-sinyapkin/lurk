@@ -1,6 +1,9 @@
 use crate::{
     auth::LurkAuthMethod,
-    common::error::{InvalidValue, LurkError},
+    common::{
+        assertions::{assert_lurk_err, bail_unless_lurk_err},
+        error::{InvalidValue, LurkError},
+    },
     io::{LurkRequest, LurkResponse},
     net::ipv4_socket_address,
     proto::socks5::{
@@ -16,21 +19,6 @@ use std::{
     io,
     net::{Ipv4Addr, SocketAddr, SocketAddrV4},
 };
-
-macro_rules! assert_lurk_err {
-    ($expected:expr, $actual:expr) => {
-        assert_eq!($expected, $actual.downcast::<LurkError>().expect("Lurk error type expected"))
-    };
-}
-
-macro_rules! bail_unless_expected_lurk_err {
-    ($expected_lurk_err:expr, $result:expr) => {
-        match $result {
-            Err(err) => assert_lurk_err!($expected_lurk_err, err),
-            Ok(ok) => panic!("Should fail with error, instead returned {:#?}", ok),
-        }
-    };
-}
 
 #[tokio::test]
 async fn rw_handshake_messages() {
@@ -55,7 +43,7 @@ async fn rw_handshake_messages() {
         "Handshake request parsed incorrectly"
     );
 
-    bail_unless_expected_lurk_err!(
+    bail_unless_lurk_err!(
         LurkError::DataError(InvalidValue::AuthMethod(auth::SOCKS5_AUTH_METHOD_NOT_ACCEPTABLE)),
         HandshakeRequest::read_from(&mut read_stream).await
     );
@@ -105,7 +93,7 @@ async fn rw_relay_messages() {
         "Relay request parsed incorrectly"
     );
 
-    bail_unless_expected_lurk_err!(
+    bail_unless_lurk_err!(
         LurkError::DataError(InvalidValue::SocksCommand(0xff)),
         RelayRequest::read_from(&mut read_stream).await
     );
@@ -139,7 +127,7 @@ async fn rw_address() {
     let addr = Address::read_from(&mut moked_stream).await.expect("Parsed IPv4 address");
     assert_eq!(addr, ipv4_socket_address!(Ipv4Addr::new(127, 0, 0, 1), 2570));
 
-    bail_unless_expected_lurk_err!(
+    bail_unless_lurk_err!(
         LurkError::DataError(InvalidValue::AddressType(0xff)),
         Address::read_from(&mut moked_stream).await
     );
