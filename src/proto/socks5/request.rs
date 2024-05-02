@@ -4,6 +4,9 @@ use anyhow::{ensure, Result};
 use std::collections::HashSet;
 use tokio::io::AsyncReadExt;
 
+#[cfg(test)]
+use tokio::io::AsyncWriteExt;
+
 // The client connects to the server, and sends a
 // version identifier/method selection message:
 // +----+----------+----------+
@@ -19,9 +22,15 @@ pub struct HandshakeRequest {
 
 impl HandshakeRequest {
     #[cfg(test)]
-    #[allow(dead_code)]
     pub fn new(auth_methods: HashSet<LurkAuthMethod>) -> HandshakeRequest {
         HandshakeRequest { auth_methods }
+    }
+
+    #[cfg(test)]
+    pub async fn write_to<T: AsyncWriteExt + Unpin>(&self, stream: &mut T) {
+        let mut packet = vec![consts::SOCKS5_VERSION, self.auth_methods.len() as u8];
+        self.auth_methods.iter().for_each(|m| packet.push(m.as_socks5_const()));
+        stream.write_all(&packet).await.unwrap();
     }
 
     pub fn auth_methods(&self) -> &HashSet<LurkAuthMethod> {

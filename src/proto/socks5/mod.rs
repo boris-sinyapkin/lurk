@@ -66,6 +66,16 @@ impl LurkAuthMethod {
             _ => bail!(LurkError::DataError(InvalidValue::AuthMethod(value))),
         }
     }
+
+    #[cfg(test)]
+    pub fn as_socks5_const(&self) -> u8 {
+        use self::consts::auth::*;
+        match self {
+            LurkAuthMethod::None => SOCKS5_AUTH_METHOD_NONE,
+            LurkAuthMethod::GssAPI => SOCKS5_AUTH_METHOD_GSSAPI,
+            LurkAuthMethod::Password => SOCKS5_AUTH_METHOD_PASSWORD,
+        }
+    }
 }
 
 #[repr(u8)]
