@@ -10,9 +10,6 @@ use tokio::{
     net::TcpStream,
 };
 
-#[cfg(test)]
-use mockall::mock;
-
 /// Alias for stream wrapper over `TcpStream`
 pub type LurkTcpStream = LurkStream<TcpStream>;
 
@@ -72,26 +69,4 @@ impl<T> DerefMut for LurkStream<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.stream
     }
-}
-
-#[cfg(test)]
-mock! {
-  pub LurkStreamWrapper<T: AsyncReadExt + AsyncWriteExt + Unpin + 'static> {}
-
-  impl<T: AsyncReadExt + AsyncWriteExt + Unpin> LurkRequestRead for LurkStreamWrapper<T> {
-      async fn read_request<Request: LurkRequest + Debug + 'static>(&mut self) -> Result<Request>;
-  }
-
-  impl<T: AsyncReadExt + AsyncWriteExt + Unpin> LurkResponseWrite for LurkStreamWrapper<T> {
-      async fn write_response<Response: LurkResponse + Debug + 'static>(&mut self, response: Response) -> Result<()>;
-  }
-
-  impl<T: AsyncReadExt + AsyncWriteExt + Unpin> Deref for LurkStreamWrapper<T> {
-      type Target = T;
-      fn deref(&self) -> &<MockLurkStreamWrapper<T> as Deref>::Target;
-  }
-
-  impl<T: AsyncReadExt + AsyncWriteExt + Unpin> DerefMut for LurkStreamWrapper<T> {
-      fn deref_mut(&mut self) -> &mut T;
-  }
 }
