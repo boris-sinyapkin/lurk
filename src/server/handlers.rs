@@ -65,7 +65,8 @@ impl LurkSocks5Handler {
             None => {
                 debug!("No acceptable methods identified for {}", self.conn.peer_addr());
                 response_builder.with_no_acceptable_method();
-                self.conn.stream_mut().write_response(response_builder.build()).await
+                self.conn.stream_mut().write_response(response_builder.build()).await?;
+                bail!(LurkError::NoAcceptableAuthenticationMethod)
             }
         }
     }

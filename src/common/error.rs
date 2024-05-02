@@ -3,18 +3,20 @@ use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq)]
 pub enum LurkError {
-    #[error("data has incorrect / corrupted field: {0}")]
+    #[error("Data has incorrect / corrupted field: {0}")]
     DataError(InvalidValue),
-    #[error("failed UTF-8 decoding of domain name: {0}")]
+    #[error("Failed UTF-8 decoding of domain name: {0}")]
     DomainNameDecodingFailed(std::string::FromUtf8Error),
-    #[error("SOCKS command {0:?} is not supported")]
+    #[error("Unsupported SOCKS command {0:?}")]
     UnsupportedSocksCommand(Command),
     #[error("Unsupported authentication method {0:?}")]
     UnsupportedAuthMethod(LurkAuthMethod),
-    #[error("unable to resolve domain name {0}")]
+    #[error("Unable to resolve domain name {0}")]
     UnresolvedDomainName(String),
     #[error("Unknown TCP connection label {0:#04x}")]
     UnknownTcpConnectionLabel(u8),
+    #[error("Unable to agree on authentication method")]
+    NoAcceptableAuthenticationMethod,
 }
 
 #[derive(Error, Debug, PartialEq)]
