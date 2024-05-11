@@ -20,6 +20,7 @@ use human_bytes::human_bytes;
 use log::{debug, error, info};
 use socket2::TcpKeepalive;
 use std::time::Duration;
+use tokio::net::TcpStream;
 
 pub struct LurkSocks5Handler {
     conn: LurkTcpConnection,
@@ -74,34 +75,65 @@ impl LurkSocks5Handler {
     /// Handling SOCKS5 command which comes in relay request from client.
     async fn process_relay_request(&mut self) -> Result<()> {
         let request = self.conn.stream_mut().read_request::<RelayRequest>().await?;
+        let command = request.command();
+        let address = request.endpoint_address();
 
-        // Handle SOCKS5 command that encapsulated in relay request data.
-        if let Err(err) = self.process_relay_request_impl(&request).await {
-            let error_string = err.to_string();
-            let response = RelayResponse::builder()
-                .with_err(err)
-                .with_bound_address(self.conn.local_addr())
-                .build();
+        // Bail out and notify client if command isn't supported
+        if command != Command::TCPConnect {
+            let err = anyhow::anyhow!(LurkError::UnsupportedSocksCommand(command));
+            return self.on_relay_request_handling_error(err, &request).await;
+        }
 
-            logging::log_request_handling_error!(self.conn, error_string, request, response);
-            self.conn.stream_mut().write_response(response).await?
+        let (conn_peer_addr, conn_bound_addr) = (self.conn.peer_addr(), self.conn.local_addr());
+        debug!("Handling SOCKS5 CONNECT from {}", conn_peer_addr);
+
+        // Create TCP stream with the endpoint
+        let mut r2l = match self.establish_tcp_connection(address).await {
+            Ok(stream) => {
+                // On success, respond to relay request with success
+                let response = RelayResponse::builder().with_success().with_bound_address(conn_bound_addr).build();
+                self.conn.stream_mut().write_response(response).await?;
+
+                stream
+            }
+            Err(err) => return self.on_relay_request_handling_error(err, &request).await,
+        };
+
+        // Acquire mutable reference to inner object of stream wrapper.
+        let mut l2r = &mut **self.conn.stream_mut();
+
+        // Create proxy tunnel which operates with the following TCP streams:
+        // - L2R: client   <--> proxy
+        // - R2L: endpoint <--> proxy
+        let mut tunnel = LurkTunnel::new(&mut l2r, &mut r2l);
+
+        logging::log_tunnel_created!(conn_peer_addr, conn_bound_addr, address);
+
+        // Start data relaying
+        match tunnel.run().await {
+            Ok((l2r, r2l)) => {
+                logging::log_tunnel_closed!(conn_peer_addr, conn_bound_addr, address, l2r, r2l);
+            }
+            Err(err) => {
+                logging::log_tunnel_closed_with_error!(conn_peer_addr, conn_bound_addr, address, err);
+            }
         }
 
         Ok(())
     }
 
-    async fn process_relay_request_impl(&mut self, request: &RelayRequest) -> Result<()> {
-        // Handle SOCKS5 command that encapsulated in relay request data.
-        match request.command() {
-            Command::TCPConnect => self.process_socks5_connect(request.endpoint_address()).await,
-            cmd => bail!(LurkError::UnsupportedSocksCommand(cmd)),
-        }
+    async fn on_relay_request_handling_error(&mut self, err: anyhow::Error, request: &RelayRequest) -> Result<()> {
+        let err_msg = err.to_string();
+        let response = RelayResponse::builder()
+            .with_err(err)
+            .with_bound_address(self.conn.local_addr())
+            .build();
+
+        logging::log_request_handling_error!(self.conn, err_msg, request, response);
+        self.conn.stream_mut().write_response(response).await
     }
 
-    async fn process_socks5_connect(&mut self, endpoint_address: &Address) -> Result<()> {
-        let (conn_peer_addr, conn_bound_addr) = (self.conn.peer_addr(), self.conn.local_addr());
-        debug!("Handling SOCKS5 CONNECT from {}", conn_peer_addr);
-
+    async fn establish_tcp_connection(&mut self, endpoint_address: &Address) -> Result<TcpStream> {
         // Create TCP options.
         let mut tcp_opts = TcpConnectionOptions::new();
         tcp_opts.set_keepalive(
@@ -112,36 +144,7 @@ impl LurkSocks5Handler {
         );
 
         // Establish TCP connection with the target endpoint.
-        let mut r2l = establish_tcp_connection_with_opts(endpoint_address, &tcp_opts).await?;
-
-        // Respond to relay request with success.
-        let response = RelayResponse::builder()
-            .with_success()
-            .with_bound_address(self.conn.local_addr())
-            .build();
-        self.conn.stream_mut().write_response(response).await?;
-
-        // Acquire mutable reference to inner object of stream wrapper.
-        let mut l2r = &mut **self.conn.stream_mut();
-
-        // Create proxy tunnel which operates with the following TCP streams:
-        // - L2R: client   <--> proxy
-        // - R2L: endpoint <--> proxy
-        let mut tunnel = LurkTunnel::new(&mut l2r, &mut r2l);
-
-        logging::log_tunnel_created!(conn_peer_addr, conn_bound_addr, endpoint_address);
-
-        // Start data relaying
-        match tunnel.run().await {
-            Ok((l2r, r2l)) => {
-                logging::log_tunnel_closed!(conn_peer_addr, conn_bound_addr, endpoint_address, l2r, r2l);
-            }
-            Err(err) => {
-                logging::log_tunnel_closed_with_error!(conn_peer_addr, conn_bound_addr, endpoint_address, err);
-            }
-        }
-
-        Ok(())
+        establish_tcp_connection_with_opts(endpoint_address, &tcp_opts).await
     }
 }
 
