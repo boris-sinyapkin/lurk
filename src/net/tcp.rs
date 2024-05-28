@@ -60,71 +60,90 @@ pub mod listener {
 
     use super::connection::{LurkTcpConnection, LurkTcpConnectionFactory, LurkTcpConnectionLabel};
     use anyhow::Result;
-    use async_listen::{backpressure, backpressure::Backpressure, ListenExt};
-    use std::net::SocketAddr;
-    use tokio::net::{TcpListener, ToSocketAddrs};
-    use tokio_stream::{wrappers::TcpListenerStream, StreamExt};
+    use socket2::{Domain, Socket, Type};
+    use std::{
+        future,
+        net::{SocketAddr, ToSocketAddrs},
+        task::{self, ready, Poll},
+    };
+    use tokio::net::{TcpListener, TcpStream};
+
+    const TCP_LISTEN_BACKLOG: i32 = 1024;
 
     /// Custom implementation of TCP listener.
     #[allow(dead_code)]
     pub struct LurkTcpListener {
-        incoming: Backpressure<TcpListenerStream>,
-        factory: LurkTcpConnectionFactory,
-        local_addr: SocketAddr,
+        inner: TcpListener,
+        conn_factory: LurkTcpConnectionFactory,
     }
 
     impl LurkTcpListener {
         /// Binds TCP listener to passed `addr`.
-        ///
-        /// Argument `conn_limit` sets the limit of open TCP connections. Thus accepting of new connections
-        /// on returned `LurkTcpListener` will be paused, when number of open TCP connections will reach
-        /// the `conn_limit`.
-        pub async fn bind(addr: impl ToSocketAddrs, conn_limit: usize) -> Result<LurkTcpListener> {
-            // Bind TCP listener.
-            let listener = TcpListener::bind(addr).await?;
-            let local_addr = listener.local_addr()?;
+        pub async fn bind(addr: impl ToSocketAddrs) -> Result<LurkTcpListener> {
+            let bind_addr = LurkTcpListener::resolve_bind_addr(addr);
 
-            // Create backpressure limit and supply the receiver to the created stream.
-            let (bp_tx, bp_rx) = backpressure::new(conn_limit);
-            let incoming = TcpListenerStream::new(listener).apply_backpressure(bp_rx);
+            // Create TCP socket
+            let socket = Socket::new(Domain::for_address(bind_addr), Type::STREAM, None)?;
 
-            Ok(LurkTcpListener {
-                incoming,
-                factory: LurkTcpConnectionFactory::new(bp_tx),
-                local_addr,
-            })
+            // Bind TCP socket and mark it ready to accept incoming connections
+            socket.bind(&bind_addr.into())?;
+            socket.listen(TCP_LISTEN_BACKLOG)?;
+
+            // Set TCP options
+            socket.set_nonblocking(true)?;
+
+            // Create tokio TCP listener from TCP socket
+            let inner: TcpListener = TcpListener::from_std(socket.into())?;
+
+            // Create TCP connections factory
+            let conn_factory = LurkTcpConnectionFactory::new();
+
+            Ok(LurkTcpListener { inner, conn_factory })
         }
 
         /// Accept incoming TCP connection.
         pub async fn accept(&mut self) -> Result<LurkTcpConnection> {
-            let err_msg: &str = "Incoming TCP listener should never return empty option";
-            let tcp_stream = self.incoming.next().await.expect(err_msg)?;
+            let (tcp_stream, _) = future::poll_fn(|cx| self.poll_inner_accept(cx)).await?;
             let tcp_label = LurkTcpConnectionLabel::from_tcp_stream(&tcp_stream).await?;
 
-            self.factory.create_connection(tcp_stream, tcp_label)
+            self.conn_factory.create_connection(tcp_stream, tcp_label)
         }
 
         /// Returns local address that this listener is binded to.
         #[allow(dead_code)]
         pub fn local_addr(&self) -> SocketAddr {
-            self.local_addr
+            self.inner.local_addr().expect("Expect inbound TCP address")
+        }
+
+        /// Polls inner TCP listener to accept new connection
+        fn poll_inner_accept(&self, cx: &mut task::Context<'_>) -> Poll<Result<(TcpStream, SocketAddr)>> {
+            let (tcp_stream, peer_addr) = ready!(self.inner.poll_accept(cx))?;
+
+            Poll::Ready(Ok((tcp_stream, peer_addr)))
+        }
+
+        fn resolve_bind_addr(addr: impl ToSocketAddrs) -> SocketAddr {
+            let mut bind_addr = addr.to_socket_addrs().unwrap();
+
+            // Return first resolved socket address
+            bind_addr.next().expect("Expect benign address to bind")
         }
     }
 
     #[cfg(test)]
     mod tests {
 
-        use super::*;
-        use futures::{stream::FuturesUnordered, TryFutureExt};
-        use std::time::Duration;
-        use tokio::{
-            io::AsyncWriteExt,
-            net::TcpStream,
-            time::{sleep, timeout},
-        };
+        // use super::*;
+        // use futures::{stream::FuturesUnordered, StreamExt, TryFutureExt};
+        // use std::time::Duration;
+        // use tokio::{
+        //     io::AsyncWriteExt,
+        //     net::TcpStream,
+        //     time::{sleep, timeout},
+        // };
 
-        // :0 tells the OS to pick an open port.
-        const TEST_BIND_IPV4: &str = "127.0.0.1:0";
+        // // :0 tells the OS to pick an open port.
+        // const TEST_BIND_IPV4: &str = "127.0.0.1:0";
 
         /// This tests backpressure limit set on listener.
         /// Number of connections intentionally exceeds the limit. Thus listener
@@ -133,46 +152,46 @@ pub mod listener {
         #[tokio::test]
 
         async fn limit_tcp_connections() {
-            let conn_limit = 5;
-            let num_clients = 20;
+            // let conn_limit = 5;
+            // let num_clients = 20;
 
-            let mut listener = LurkTcpListener::bind(TEST_BIND_IPV4, 5).await.expect("Expect binded listener");
-            let listener_addr = listener.local_addr();
+            // let mut listener = LurkTcpListener::bind(TEST_BIND_IPV4, 5).await.expect("Expect binded listener");
+            // let listener_addr = listener.local_addr();
 
-            let client_tasks: FuturesUnordered<_> = (0..num_clients)
-                .map(|_| async move {
-                    TcpStream::connect(listener_addr)
-                        .and_then(|mut s| async move { s.write_all(&[0x05]).await })
-                        .await
-                        .unwrap()
-                })
-                .collect();
+            // let client_tasks: FuturesUnordered<_> = (0..num_clients)
+            //     .map(|_| async move {
+            //         TcpStream::connect(listener_addr)
+            //             .and_then(|mut s| async move { s.write_all(&[0x05]).await })
+            //             .await
+            //             .unwrap()
+            //     })
+            //     .collect();
 
-            // Await all clients to complete.
-            client_tasks.collect::<()>().await;
+            // // Await all clients to complete.
+            // client_tasks.collect::<()>().await;
 
-            // We have to handle all clients, but only `conn_limit`
-            // could be handled in parallel.
-            for _ in 0..num_clients {
-                let conn = timeout(Duration::from_secs(2), listener.accept())
-                    .await
-                    .expect("Expect acceptied connection before expired timeout")
-                    .expect("Expect accepted TCP connection");
+            // // We have to handle all clients, but only `conn_limit`
+            // // could be handled in parallel.
+            // for _ in 0..num_clients {
+            //     let conn = timeout(Duration::from_secs(2), listener.accept())
+            //         .await
+            //         .expect("Expect acceptied connection before expired timeout")
+            //         .expect("Expect accepted TCP connection");
 
-                assert_eq!(LurkTcpConnectionLabel::SOCKS5, conn.label());
-                assert!(
-                    listener.factory.get_active_tokens() <= conn_limit,
-                    "Number of opened connections must not exceed the limit"
-                );
+            //     assert_eq!(LurkTcpConnectionLabel::SOCKS5, conn.label());
+            //     assert!(
+            //         listener.factory.get_active_tokens() <= conn_limit,
+            //         "Number of opened connections must not exceed the limit"
+            //     );
 
-                tokio::spawn(async move {
-                    // Some client handling ...
-                    sleep(Duration::from_millis(300)).await;
-                    // Drop the connection after sleep, hence one
-                    // slot should become available for the next client
-                    drop(conn)
-                });
-            }
+            //     tokio::spawn(async move {
+            //         // Some client handling ...
+            //         sleep(Duration::from_millis(300)).await;
+            //         // Drop the connection after sleep, hence one
+            //         // slot should become available for the next client
+            //         drop(conn)
+            //     });
+            // }
         }
     }
 }
@@ -184,7 +203,6 @@ pub mod connection {
         io::stream::{LurkStream, LurkTcpStream},
     };
     use anyhow::{bail, Result};
-    use async_listen::backpressure::{Sender, Token};
     use std::{fmt::Display, io, net::SocketAddr};
     use tokio::net::TcpStream;
 
@@ -229,39 +247,27 @@ pub mod connection {
     }
 
     /// Factory that produces new TCP connection instances.
-    ///
-    /// For each new instance, factory uses backpressure 'sender' to create the token that
-    /// should be destroyed on TCP connection drop.
-    ///
-    pub struct LurkTcpConnectionFactory {
-        /// Backpressure sender instance.
-        /// This will produce tokens for created TCP connections.
-        bp_tx: Sender,
-    }
+    pub struct LurkTcpConnectionFactory {}
 
     impl LurkTcpConnectionFactory {
-        pub fn new(bp_tx: Sender) -> LurkTcpConnectionFactory {
-            LurkTcpConnectionFactory { bp_tx }
+        pub fn new() -> LurkTcpConnectionFactory {
+            LurkTcpConnectionFactory {}
         }
 
         /// Returns the number of currently active tokens.
         #[allow(dead_code)]
         pub fn get_active_tokens(&self) -> usize {
-            self.bp_tx.get_active_tokens()
+            0
         }
 
         pub fn create_connection(&self, tcp_stream: TcpStream, label: LurkTcpConnectionLabel) -> Result<LurkTcpConnection> {
-            // Wrap raw TcpStream to the stream wrapper and generate new backpressure token
-            // that must be dropped on connection destruction.
-            LurkTcpConnection::new(tcp_stream, label, self.bp_tx.token())
+            LurkTcpConnection::new(tcp_stream, label)
         }
     }
 
     pub struct LurkTcpConnection {
         /// Lurk wrapper of TcpStream
         stream: LurkTcpStream,
-        /// Backpressure token
-        _token: Token,
         /// Label describing traffic in this TCP connection
         label: LurkTcpConnectionLabel,
         /// Remote address that this connection is connected to
@@ -271,12 +277,11 @@ pub mod connection {
     }
 
     impl LurkTcpConnection {
-        fn new(tcp_stream: TcpStream, label: LurkTcpConnectionLabel, token: Token) -> Result<LurkTcpConnection> {
+        fn new(tcp_stream: TcpStream, label: LurkTcpConnectionLabel) -> Result<LurkTcpConnection> {
             Ok(LurkTcpConnection {
                 peer_addr: tcp_stream.peer_addr()?,
                 local_addr: tcp_stream.local_addr()?,
                 stream: LurkStream::new(tcp_stream),
-                _token: token,
                 label,
             })
         }

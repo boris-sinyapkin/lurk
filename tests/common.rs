@@ -14,10 +14,10 @@ pub fn init_logging() {
 }
 
 /// Spawn Lurk proxy instance.
-pub async fn spawn_lurk_server(addr: SocketAddr, tcp_conn_limit: usize) -> tokio::task::JoinHandle<()> {
+pub async fn spawn_lurk_server(addr: SocketAddr) -> tokio::task::JoinHandle<()> {
     // Run proxy
     let handle = tokio::spawn(async move {
-        LurkServer::new(addr, tcp_conn_limit)
+        LurkServer::new(addr)
             .run()
             .await
             .expect("Error during proxy server run")
