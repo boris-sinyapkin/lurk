@@ -61,9 +61,12 @@ pub mod listener {
     use super::connection::{LurkTcpConnection, LurkTcpConnectionFactory, LurkTcpConnectionLabel};
     use anyhow::Result;
     use async_listen::{backpressure, backpressure::Backpressure, ListenExt};
-    use std::net::SocketAddr;
-    use tokio::net::{TcpListener, ToSocketAddrs};
+    use socket2::{Domain, Socket, Type};
+    use std::net::{SocketAddr, ToSocketAddrs};
+    use tokio::net::TcpListener;
     use tokio_stream::{wrappers::TcpListenerStream, StreamExt};
+
+    const TCP_LISTEN_BACKLOG: i32 = 1024;
 
     /// Custom implementation of TCP listener.
     #[allow(dead_code)]
@@ -80,13 +83,25 @@ pub mod listener {
         /// on returned `LurkTcpListener` will be paused, when number of open TCP connections will reach
         /// the `conn_limit`.
         pub async fn bind(addr: impl ToSocketAddrs, conn_limit: usize) -> Result<LurkTcpListener> {
-            // Bind TCP listener.
-            let listener = TcpListener::bind(addr).await?;
-            let local_addr = listener.local_addr()?;
+            let bind_addr = LurkTcpListener::resolve_sockaddr(addr);
+
+            // Create TCP socket
+            let socket = Socket::new(Domain::for_address(bind_addr), Type::STREAM, None)?;
+
+            // Bind TCP socket and mark it ready to accept incoming connections
+            socket.bind(&bind_addr.into())?;
+            socket.listen(TCP_LISTEN_BACKLOG)?;
+
+            // Set TCP options
+            socket.set_nonblocking(true)?;
+
+            // Create tokio TCP listener from TCP socket
+            let inner: TcpListener = TcpListener::from_std(socket.into())?;
+            let local_addr = inner.local_addr()?;
 
             // Create backpressure limit and supply the receiver to the created stream.
             let (bp_tx, bp_rx) = backpressure::new(conn_limit);
-            let incoming = TcpListenerStream::new(listener).apply_backpressure(bp_rx);
+            let incoming = TcpListenerStream::new(inner).apply_backpressure(bp_rx);
 
             Ok(LurkTcpListener {
                 incoming,
@@ -108,6 +123,11 @@ pub mod listener {
         #[allow(dead_code)]
         pub fn local_addr(&self) -> SocketAddr {
             self.local_addr
+        }
+
+        fn resolve_sockaddr(addr: impl ToSocketAddrs) -> SocketAddr {
+            // Return first resolved socket address
+            addr.to_socket_addrs().unwrap().next().expect("Expect benign address to bind")
         }
     }
 
@@ -131,7 +151,6 @@ pub mod listener {
         /// should put on hold some of them and handle only allowed number of
         /// them in parallel.
         #[tokio::test]
-
         async fn limit_tcp_connections() {
             let conn_limit = 5;
             let num_clients = 20;
@@ -156,7 +175,7 @@ pub mod listener {
             for _ in 0..num_clients {
                 let conn = timeout(Duration::from_secs(2), listener.accept())
                     .await
-                    .expect("Expect acceptied connection before expired timeout")
+                    .expect("Expect accepted connection before expired timeout")
                     .expect("Expect accepted TCP connection");
 
                 assert_eq!(LurkTcpConnectionLabel::SOCKS5, conn.label());
