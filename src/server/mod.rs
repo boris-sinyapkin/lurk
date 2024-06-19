@@ -58,6 +58,10 @@ impl LurkServer {
         // Create connection handler and supply handling of particular traffic label in a separate thread.
         let mut connection_handler = match conn.label() {
             LurkTcpConnectionLabel::SOCKS5 => LurkSocks5Handler::new(conn),
+            unknown_label => {
+                logging::log_tcp_closed_conn_with_error!(conn_peer_addr, conn_label, unknown_label);
+                return;
+            }
         };
 
         tokio::spawn(async move {

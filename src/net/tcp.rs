@@ -198,10 +198,7 @@ pub mod listener {
 
 pub mod connection {
 
-    use crate::{
-        common::error::LurkError,
-        io::stream::{LurkStream, LurkTcpStream},
-    };
+    use crate::io::stream::{LurkStream, LurkTcpStream};
     use anyhow::{bail, Result};
     use async_listen::backpressure::{Sender, Token};
     use std::{fmt::Display, io, net::SocketAddr};
@@ -213,9 +210,13 @@ pub mod connection {
     /// and checks the values inside. If the value in unknown, the connection is skipped.
     ///
     #[derive(Debug, Clone, Copy, PartialEq)]
+    #[repr(u8)]
     pub enum LurkTcpConnectionLabel {
         /// Traffic of TCP connection belongs to proxy SOCKS5 protocol
         SOCKS5 = 0x05,
+
+        /// Unknown traffic
+        Unknown(u8),
     }
 
     impl LurkTcpConnectionLabel {
@@ -229,10 +230,12 @@ pub mod connection {
             };
 
             if peeked_bytes == 1 {
-                match buff[0] {
-                    0x05 => Ok(LurkTcpConnectionLabel::SOCKS5),
-                    t => bail!(LurkError::UnknownTcpConnectionLabel(t)),
-                }
+                let label = match buff[0] {
+                    0x05 => LurkTcpConnectionLabel::SOCKS5,
+                    v => LurkTcpConnectionLabel::Unknown(v),
+                };
+
+                Ok(label)
             } else {
                 bail!(io::ErrorKind::UnexpectedEof)
             }
@@ -243,6 +246,7 @@ pub mod connection {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
                 LurkTcpConnectionLabel::SOCKS5 => write!(f, "SOCKS5"),
+                LurkTcpConnectionLabel::Unknown(l) => write!(f, "Unknown TCP label {l:#04x}"),
             }
         }
     }
@@ -362,12 +366,8 @@ pub mod connection {
             listener
                 .accept()
                 .and_then(|(s, _)| async move {
-                    let err = LurkTcpConnectionLabel::from_tcp_stream(&s)
-                        .await
-                        .expect_err("Expected Lurk error")
-                        .downcast::<LurkError>()
-                        .unwrap();
-                    assert_eq!(LurkError::UnknownTcpConnectionLabel(0xFF), err);
+                    let label = LurkTcpConnectionLabel::from_tcp_stream(&s).await.unwrap();
+                    assert_eq!(LurkTcpConnectionLabel::Unknown(0xFF), label);
                     Ok(())
                 })
                 .await

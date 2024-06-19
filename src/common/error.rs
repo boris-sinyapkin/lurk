@@ -13,8 +13,6 @@ pub enum LurkError {
     UnsupportedAuthMethod(LurkAuthMethod),
     #[error("Unable to resolve domain name {0}")]
     UnresolvedDomainName(String),
-    #[error("Unknown TCP connection label {0:#04x}")]
-    UnknownTcpConnectionLabel(u8),
     #[error("Unable to agree on authentication method")]
     NoAcceptableAuthenticationMethod,
 }
