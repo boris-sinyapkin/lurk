@@ -17,6 +17,10 @@ pub struct LurkConfig {
     /// Limit number of simulatinously opened proxy TCP connections
     #[clap(short = 'l', long, default_value_t = 1024)]
     proxy_tcp_conn_limit: usize,
+
+    /// Spin up HTTP endpoint in a background thread
+    #[clap(short = 'e', long, default_value_t = false)]
+    enable_http_endpoint: bool
 }
 
 impl LurkConfig {
@@ -29,5 +33,9 @@ impl LurkConfig {
 
     pub fn server_tcp_conn_limit(&self) -> usize {
         self.proxy_tcp_conn_limit
+    }
+
+    pub fn enable_http_endpoint(&self) -> bool {
+        self.enable_http_endpoint
     }
 }

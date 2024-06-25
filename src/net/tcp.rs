@@ -2,6 +2,7 @@ use super::Address;
 use anyhow::Result;
 use log::{debug, trace};
 use socket2::{SockRef, TcpKeepalive};
+use std::net::{SocketAddr, ToSocketAddrs};
 use tokio::net::TcpStream;
 
 /// Different TCP connection options.
@@ -56,6 +57,11 @@ pub async fn establish_tcp_connection_with_opts(endpoint: &Address, tcp_opts: &T
     Ok(tcp_stream)
 }
 
+pub fn resolve_sockaddr(addr: impl ToSocketAddrs) -> SocketAddr {
+    // Return first resolved socket address
+    addr.to_socket_addrs().unwrap().next().expect("Expect benign address to resolve")
+}
+
 pub mod listener {
 
     use super::connection::{LurkTcpConnection, LurkTcpConnectionFactory, LurkTcpConnectionLabel};
@@ -83,7 +89,7 @@ pub mod listener {
         /// on returned `LurkTcpListener` will be paused, when number of open TCP connections will reach
         /// the `conn_limit`.
         pub async fn bind(addr: impl ToSocketAddrs, conn_limit: usize) -> Result<LurkTcpListener> {
-            let bind_addr = LurkTcpListener::resolve_sockaddr(addr);
+            let bind_addr = super::resolve_sockaddr(addr);
 
             // Create TCP socket
             let socket = Socket::new(Domain::for_address(bind_addr), Type::STREAM, None)?;
@@ -123,11 +129,6 @@ pub mod listener {
         #[allow(dead_code)]
         pub fn local_addr(&self) -> SocketAddr {
             self.local_addr
-        }
-
-        fn resolve_sockaddr(addr: impl ToSocketAddrs) -> SocketAddr {
-            // Return first resolved socket address
-            addr.to_socket_addrs().unwrap().next().expect("Expect benign address to bind")
         }
     }
 
