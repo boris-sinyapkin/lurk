@@ -7,7 +7,6 @@ use lurk::{
     config::{self, LurkConfig},
     server::LurkServer,
 };
-use std::net::{Ipv4Addr, SocketAddrV4};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -20,9 +19,9 @@ async fn main() -> Result<()> {
     // Create proxy server instance. It will handle incoming connection in async. fashion.
     let server = LurkServer::new(lurk_config.server_tcp_bind_addr());
 
-    if lurk_config.enable_http_endpoint() {
-        let http_endpoint_addr = SocketAddrV4::new(Ipv4Addr::new(127, 0, 0, 1), 8112);
-        let http_endpoint = LurkHttpEndpoint::new(http_endpoint_addr);
+    // Spin up HTTP endpoint if enabled
+    if let Some(http_endpoint_bind_addr) = lurk_config.http_endpoint_bind_addr() {
+        let http_endpoint = LurkHttpEndpoint::new(http_endpoint_bind_addr);
         tokio::spawn(async move {
             if let Err(err) = http_endpoint.run().await {
                 error!("Error occured while HTTP endpoint was running: {}", err);

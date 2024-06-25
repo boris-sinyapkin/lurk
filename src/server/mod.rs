@@ -29,7 +29,7 @@ impl LurkServer {
 
     pub async fn run(&self) -> Result<()> {
         let mut tcp_listener = LurkTcpListener::bind(self.bind_addr).await?;
-        info!("Listening on {}", self.bind_addr);
+        info!("Proxy is listening on {}", self.bind_addr);
 
         loop {
             match tcp_listener.accept().await {
