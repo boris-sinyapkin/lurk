@@ -5,7 +5,6 @@ use lurk::{
     config::{self, LurkConfig},
     server::LurkServer,
 };
-use std::net::{IpAddr, SocketAddr};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -16,8 +15,7 @@ async fn main() -> Result<()> {
     let config = LurkConfig::parse();
 
     // Create proxy server instance. It will handle incoming connection in async. fashion.
-    let server_addr = SocketAddr::new(IpAddr::V4(config.bind_ipv4()), config.bind_port());
-    let server = LurkServer::new(server_addr, config.tcp_conn_limit());
+    let server = LurkServer::new(config.server_tcp_bind_addr(), config.server_tcp_conn_limit());
 
     // Bind and serve clients "forever"
     server.run().await?;
