@@ -13,6 +13,10 @@ pub struct LurkConfig {
     /// Proxy IPv4 address to listen on
     #[clap(short = 'i', long, default_value = "0.0.0.0")]
     proxy_ipv4: Option<Ipv4Addr>,
+
+    /// Spin up HTTP endpoint in a background thread
+    #[clap(short = 'e', long, default_value_t = false)]
+    enable_http_endpoint: bool
 }
 
 impl LurkConfig {
@@ -21,5 +25,9 @@ impl LurkConfig {
             IpAddr::V4(self.proxy_ipv4.expect("IPv4 should have correct format")),
             self.proxy_port,
         )
+    }
+
+    pub fn enable_http_endpoint(&self) -> bool {
+        self.enable_http_endpoint
     }
 }
