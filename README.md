@@ -56,10 +56,20 @@ Fast and fancy SOCKS5 proxy
 Usage: lurk [OPTIONS]
 
 Options:
-  -p, --port <PORT>  TCP port to listen on [default: 1080]
-  -i, --ipv4 <IPV4>  IPv4 to listen on [default: 127.0.0.1]
-  -h, --help         Print help
-  -V, --version      Print version
+  -p, --proxy-port <PROXY_PORT>
+          Proxy server TCP port to listen on [default: 1080]
+  -i, --proxy-ipv4 <PROXY_IPV4>
+          Proxy server IPv4 address to listen on [default: 0.0.0.0]
+  -l, --proxy-tcp-conn-limit <PROXY_TCP_CONN_LIMIT>
+          Limit number of simulatinously opened TCP connections for proxy server [default: 1024]
+      --http-endpoint-enabled
+          Spin up HTTP endpoint in a background thread
+      --http-endpoint-port <HTTP_ENDPOINT_PORT>
+          TCP port to server HTTP requests [default: 8080]
+  -h, --help
+          Print help
+  -V, --version
+          Print version
 ```
 
 If default settings is acceptable, execute installed binary:
