@@ -15,7 +15,7 @@ async fn main() -> Result<()> {
     let config = LurkConfig::parse();
 
     // Create proxy server instance. It will handle incoming connection in async. fashion.
-    let server = LurkServer::new(config.server_tcp_bind_addr(), config.server_tcp_conn_limit());
+    let server = LurkServer::new(config.server_tcp_bind_addr());
 
     // Bind and serve clients "forever"
     server.run().await?;

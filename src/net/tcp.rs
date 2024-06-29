@@ -60,7 +60,6 @@ pub mod listener {
 
     use super::connection::{LurkTcpConnection, LurkTcpConnectionFactory, LurkTcpConnectionLabel};
     use anyhow::Result;
-    use async_listen::{backpressure, backpressure::Backpressure, ListenExt};
     use socket2::{Domain, Socket, Type};
     use std::net::{SocketAddr, ToSocketAddrs};
     use tokio::net::TcpListener;
@@ -71,7 +70,7 @@ pub mod listener {
     /// Custom implementation of TCP listener.
     #[allow(dead_code)]
     pub struct LurkTcpListener {
-        incoming: Backpressure<TcpListenerStream>,
+        incoming: TcpListenerStream,
         factory: LurkTcpConnectionFactory,
         local_addr: SocketAddr,
     }
@@ -79,10 +78,7 @@ pub mod listener {
     impl LurkTcpListener {
         /// Binds TCP listener to passed `addr`.
         ///
-        /// Argument `conn_limit` sets the limit of open TCP connections. Thus accepting of new connections
-        /// on returned `LurkTcpListener` will be paused, when number of open TCP connections will reach
-        /// the `conn_limit`.
-        pub async fn bind(addr: impl ToSocketAddrs, conn_limit: usize) -> Result<LurkTcpListener> {
+        pub async fn bind(addr: impl ToSocketAddrs) -> Result<LurkTcpListener> {
             let bind_addr = LurkTcpListener::resolve_sockaddr(addr);
 
             // Create TCP socket
@@ -100,12 +96,11 @@ pub mod listener {
             let local_addr = inner.local_addr()?;
 
             // Create backpressure limit and supply the receiver to the created stream.
-            let (bp_tx, bp_rx) = backpressure::new(conn_limit);
-            let incoming = TcpListenerStream::new(inner).apply_backpressure(bp_rx);
+            let incoming = TcpListenerStream::new(inner);
 
             Ok(LurkTcpListener {
                 incoming,
-                factory: LurkTcpConnectionFactory::new(bp_tx),
+                factory: LurkTcpConnectionFactory::new(),
                 local_addr,
             })
         }
@@ -150,12 +145,13 @@ pub mod listener {
         /// Number of connections intentionally exceeds the limit. Thus listener
         /// should put on hold some of them and handle only allowed number of
         /// them in parallel.
+        #[ignore]
         #[tokio::test]
         async fn limit_tcp_connections() {
             let conn_limit = 5;
             let num_clients = 20;
 
-            let mut listener = LurkTcpListener::bind(TEST_BIND_IPV4, 5).await.expect("Expect binded listener");
+            let mut listener = LurkTcpListener::bind(TEST_BIND_IPV4).await.expect("Expect binded listener");
             let listener_addr = listener.local_addr();
 
             let client_tasks: FuturesUnordered<_> = (0..num_clients)
@@ -200,7 +196,6 @@ pub mod connection {
 
     use crate::io::stream::{LurkStream, LurkTcpStream};
     use anyhow::{bail, Result};
-    use async_listen::backpressure::{Sender, Token};
     use std::{fmt::Display, io, net::SocketAddr};
     use tokio::net::TcpStream;
 
@@ -256,35 +251,29 @@ pub mod connection {
     /// For each new instance, factory uses backpressure 'sender' to create the token that
     /// should be destroyed on TCP connection drop.
     ///
-    pub struct LurkTcpConnectionFactory {
-        /// Backpressure sender instance.
-        /// This will produce tokens for created TCP connections.
-        bp_tx: Sender,
-    }
+    pub struct LurkTcpConnectionFactory {}
 
     impl LurkTcpConnectionFactory {
-        pub fn new(bp_tx: Sender) -> LurkTcpConnectionFactory {
-            LurkTcpConnectionFactory { bp_tx }
+        pub fn new() -> LurkTcpConnectionFactory {
+            LurkTcpConnectionFactory {}
         }
 
         /// Returns the number of currently active tokens.
         #[allow(dead_code)]
         pub fn get_active_tokens(&self) -> usize {
-            self.bp_tx.get_active_tokens()
+            0
         }
 
         pub fn create_connection(&self, tcp_stream: TcpStream, label: LurkTcpConnectionLabel) -> Result<LurkTcpConnection> {
             // Wrap raw TcpStream to the stream wrapper and generate new backpressure token
             // that must be dropped on connection destruction.
-            LurkTcpConnection::new(tcp_stream, label, self.bp_tx.token())
+            LurkTcpConnection::new(tcp_stream, label)
         }
     }
 
     pub struct LurkTcpConnection {
         /// Lurk wrapper of TcpStream
         stream: LurkTcpStream,
-        /// Backpressure token
-        _token: Token,
         /// Label describing traffic in this TCP connection
         label: LurkTcpConnectionLabel,
         /// Remote address that this connection is connected to
@@ -294,12 +283,11 @@ pub mod connection {
     }
 
     impl LurkTcpConnection {
-        fn new(tcp_stream: TcpStream, label: LurkTcpConnectionLabel, token: Token) -> Result<LurkTcpConnection> {
+        fn new(tcp_stream: TcpStream, label: LurkTcpConnectionLabel) -> Result<LurkTcpConnection> {
             Ok(LurkTcpConnection {
                 peer_addr: tcp_stream.peer_addr()?,
                 local_addr: tcp_stream.local_addr()?,
                 stream: LurkStream::new(tcp_stream),
-                _token: token,
                 label,
             })
         }

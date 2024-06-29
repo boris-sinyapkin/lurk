@@ -16,7 +16,6 @@ mod handlers;
 
 pub struct LurkServer {
     bind_addr: SocketAddr,
-    conn_limit: usize,
 }
 
 impl LurkServer {
@@ -24,13 +23,13 @@ impl LurkServer {
     /// handle resource exhaustion errors.
     const DELAY_AFTER_ERROR_MILLIS: u64 = 500;
 
-    pub fn new(bind_addr: SocketAddr, conn_limit: usize) -> LurkServer {
-        LurkServer { bind_addr, conn_limit }
+    pub fn new(bind_addr: SocketAddr) -> LurkServer {
+        LurkServer { bind_addr }
     }
 
     pub async fn run(&self) -> Result<()> {
-        let mut tcp_listener = LurkTcpListener::bind(self.bind_addr, self.conn_limit).await?;
-        info!("Listening on {} (TCP connections limit {})", self.bind_addr, self.conn_limit);
+        let mut tcp_listener = LurkTcpListener::bind(self.bind_addr).await?;
+        info!("Listening on {}", self.bind_addr);
 
         loop {
             match tcp_listener.accept().await {

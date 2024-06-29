@@ -13,10 +13,6 @@ pub struct LurkConfig {
     /// Proxy IPv4 address to listen on
     #[clap(short = 'i', long, default_value = "0.0.0.0")]
     proxy_ipv4: Option<Ipv4Addr>,
-
-    /// Limit number of simulatinously opened proxy TCP connections
-    #[clap(short = 'l', long, default_value_t = 1024)]
-    proxy_tcp_conn_limit: usize,
 }
 
 impl LurkConfig {
@@ -25,9 +21,5 @@ impl LurkConfig {
             IpAddr::V4(self.proxy_ipv4.expect("IPv4 should have correct format")),
             self.proxy_port,
         )
-    }
-
-    pub fn server_tcp_conn_limit(&self) -> usize {
-        self.proxy_tcp_conn_limit
     }
 }

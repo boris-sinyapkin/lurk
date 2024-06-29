@@ -161,11 +161,10 @@ mod tests {
 
     // :0 tells the OS to pick an open port.
     const TEST_BIND_IPV4: &str = "127.0.0.1:0";
-    const TEST_CONN_LIMIT: usize = 1024;
 
     #[tokio::test]
     async fn socks5_handshake_with_auth_method() {
-        let mut listener = LurkTcpListener::bind(TEST_BIND_IPV4, TEST_CONN_LIMIT)
+        let mut listener = LurkTcpListener::bind(TEST_BIND_IPV4)
             .await
             .expect("Expect binded listener");
 
@@ -206,7 +205,7 @@ mod tests {
 
     #[tokio::test]
     async fn socks5_handshake_with_non_accepatable_method() {
-        let mut listener = LurkTcpListener::bind(TEST_BIND_IPV4, TEST_CONN_LIMIT)
+        let mut listener = LurkTcpListener::bind(TEST_BIND_IPV4)
             .await
             .expect("Expect binded listener");
 
