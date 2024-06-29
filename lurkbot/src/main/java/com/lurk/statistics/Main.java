@@ -10,10 +10,11 @@ public class Main {
 
     public static void main(String[] args) throws Exception {
         LurkBotConfiguration config = LurkBot.getConfig();
-
-        @SuppressWarnings("resource")
-        TelegramBotsLongPollingApplication application = new TelegramBotsLongPollingApplication();
-
-        application.registerBot(config.telegramBotToken(), new LurkBot());
+        try (TelegramBotsLongPollingApplication application = new TelegramBotsLongPollingApplication()) {
+            application.registerBot(config.telegramBotToken(), new LurkBot());
+            Thread.currentThread().join();
+        } catch (Exception e) {
+            log.error("Exception occured while bot was running {}", e);
+        }
     }
 }
