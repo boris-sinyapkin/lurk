@@ -9,7 +9,7 @@ public class LurkUtils {
         return String.format("%s: %s\n", node.toString(), status);
     }
 
-    public static String buildHealthcheckStatusString(LurkNode node, HttpResponse<Void> httpResponse) {
+    public static String buildHealthcheckStatusString(LurkNode node, HttpResponse<?> httpResponse) {
         String nodeStatus = (httpResponse.statusCode() == 200)
                 ? "is up and running"
                 : "is died";

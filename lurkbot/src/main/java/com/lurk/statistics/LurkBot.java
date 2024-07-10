@@ -21,11 +21,9 @@ public class LurkBot implements LongPollingSingleThreadUpdateConsumer {
 
     private final TelegramClient telegramClient;
     private final LurkBotCommandHandler commandHandler;
-    private final LurkNodeManager nodeManager;
 
     public LurkBot(String token) {
-        nodeManager = new LurkNodeManager();
-        commandHandler = new LurkBotCommandHandler(nodeManager);
+        commandHandler = new LurkBotCommandHandler();
         telegramClient = new OkHttpTelegramClient(token);
     }
 
@@ -38,7 +36,7 @@ public class LurkBot implements LongPollingSingleThreadUpdateConsumer {
 
     private void onMessageReceived(Message message) {
         if (message.hasText()) {
-            SendMessage response = commandHandler.handleCommand(message.getText(), message.getChatId());
+            SendMessage response = commandHandler.handle(message.getText(), message.getChatId());
             try {
                 telegramClient.execute(response);
             } catch (TelegramApiException e) {
