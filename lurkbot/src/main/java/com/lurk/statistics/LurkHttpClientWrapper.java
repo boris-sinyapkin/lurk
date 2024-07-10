@@ -29,7 +29,7 @@ public class LurkHttpClientWrapper {
     public static HttpRequest buildHttpGetRequest(URI uri) {
         return HttpRequest.newBuilder()
                 .timeout(HTTP_CLIENT_REQUEST_TIMEOUT)
-                .GET()
+                .HEAD()
                 .uri(uri)
                 .build();
     }

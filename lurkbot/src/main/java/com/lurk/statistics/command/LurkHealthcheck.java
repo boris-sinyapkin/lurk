@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.util.Optional;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,6 +27,11 @@ public class LurkHealthcheck implements LurkCommand {
     }
 
     @Override
+    public String path() {
+        return "/healthcheck";
+    }
+
+    @Override
     public SendMessage execute(long chatId) {
         // Retrieve visible nodes for input chat_id.
         Set<LurkNode> visibleNodes = nodeManager.getVisibleNodes(chatId);
@@ -39,29 +45,64 @@ public class LurkHealthcheck implements LurkCommand {
         StringBuilder messageText = new StringBuilder();
         // Iterate over visible nodes, request their health status
         // and construct response message.
-        for (LurkNode node : visibleNodes) {
-            URI nodeUri = node.getHttpUri(path());
-            HttpResponse<String> httpResponse;
-            HttpRequest httpRequest =  LurkHttpClientWrapper.buildHttpGetRequest(nodeUri);
-
-            try {
-                log.debug("Sending GET request to {}", nodeUri);
-                httpResponse = httpClientWrapper.send(httpRequest);
-            } catch (IOException | InterruptedException e) {
-                log.error("Exception thrown while sending GET request to {}", nodeUri, e);
-                messageText.append(LurkUtils.buildHealthcheckStatusString(node, e.getMessage()));
-                continue;
-            }
-
-            messageText.append(LurkUtils.buildHealthcheckStatusString(node, httpResponse));
-        }
+        visibleNodes.forEach(node -> {
+            HealthcheckResult result = doHealthcheck(node);
+            messageText.append(result.toString() + "\n");
+        });
 
         return LurkUtils.buildMessageWithText(chatId, messageText.toString());
     }
 
-    @Override
-    public String path() {
-        return "/healthcheck";
+    private HealthcheckResult doHealthcheck(LurkNode node) {
+        URI nodeUri = node.getHttpUri(path());
+        HealthcheckResult result = new HealthcheckResult(node);
+
+        HttpResponse<String> httpResponse;
+        HttpRequest httpRequest = LurkHttpClientWrapper.buildHttpGetRequest(nodeUri);
+
+        try {
+            log.debug("Sending request to {}", nodeUri);
+            httpResponse = httpClientWrapper.send(httpRequest);
+        } catch (IOException | InterruptedException e) {
+            log.error("Exception thrown while sending request to {}", nodeUri, e);
+            result.setErrorMessage(e.getMessage());
+            return result;
+        }
+
+        result.setHttpStatusCode(httpResponse.statusCode());
+        return result;
+    }
+
+    private class HealthcheckResult {
+        final LurkNode targetNode;
+
+        Optional<Integer> httpStatusCode;
+        Optional<String> errorMessage;
+
+        HealthcheckResult(LurkNode targetNode) {
+            this.targetNode = targetNode;
+            this.httpStatusCode = Optional.empty();
+            this.errorMessage = Optional.empty();
+        }
+    
+        void setHttpStatusCode(Integer code) {
+            httpStatusCode = Optional.of(code);
+        }
+
+        void setErrorMessage(String msg) {
+            errorMessage = Optional.of(msg);
+        }
+
+        @Override
+        public String toString() {
+            StringBuilder str = new StringBuilder(targetNode.toString());
+            if (httpStatusCode.isPresent()) {
+                str.append(String.format("\n\tresponded with %d", httpStatusCode.get()));
+            } else if (errorMessage.isPresent()) {
+                str.append(String.format("\n\tfailed with error: %s", errorMessage.get()));
+            }
+            return str.toString();
+        }
     }
 
 }
