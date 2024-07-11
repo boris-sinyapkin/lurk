@@ -13,6 +13,7 @@ import com.lurk.statistics.LurkHttpClientWrapper;
 import com.lurk.statistics.LurkNode;
 import com.lurk.statistics.LurkNodeManager;
 import com.lurk.statistics.LurkUtils;
+import com.lurk.statistics.LurkUtils.MessageParseMode;
 
 public class LurkHealthcheck implements LurkCommand {
 
@@ -42,15 +43,15 @@ public class LurkHealthcheck implements LurkCommand {
             return LurkUtils.buildMessageWithText(chatId, "there's no visible nodes available");
         }
 
-        StringBuilder messageText = new StringBuilder();
+        StringBuilder messageText = new StringBuilder("Nodes health status:\n\n");
         // Iterate over visible nodes, request their health status
         // and construct response message.
         visibleNodes.forEach(node -> {
             HealthcheckResult result = doHealthcheck(node);
-            messageText.append(result.toString() + "\n");
+            messageText.append(result.toMarkdownString() + "\n\n");
         });
 
-        return LurkUtils.buildMessageWithText(chatId, messageText.toString());
+        return LurkUtils.buildMessageWithText(chatId, messageText.toString(), MessageParseMode.MARKDOWN);
     }
 
     private HealthcheckResult doHealthcheck(LurkNode node) {
@@ -81,10 +82,10 @@ public class LurkHealthcheck implements LurkCommand {
 
         HealthcheckResult(LurkNode targetNode) {
             this.targetNode = targetNode;
-            this.httpStatusCode = Optional.empty();
             this.errorMessage = Optional.empty();
+            this.httpStatusCode = Optional.empty();
         }
-    
+
         void setHttpStatusCode(Integer code) {
             httpStatusCode = Optional.of(code);
         }
@@ -93,13 +94,23 @@ public class LurkHealthcheck implements LurkCommand {
             errorMessage = Optional.of(msg);
         }
 
-        @Override
-        public String toString() {
-            StringBuilder str = new StringBuilder(targetNode.toString());
+        String toMarkdownString() {
+            StringBuilder str = new StringBuilder();
             if (httpStatusCode.isPresent()) {
-                str.append(String.format("\n\tresponded with %d", httpStatusCode.get()));
+                int code = httpStatusCode.get();
+                switch (code) {
+                    case 200:
+                        str.append("🟢 *%s*:\n- responded with *SUCCESS*".formatted(targetNode.toString()));
+                        break;
+
+                    default:
+                        str.append("🟡 *%s*:\n- responded with %d HTTP status code".formatted(targetNode.toString(),
+                                code));
+                        break;
+                }
             } else if (errorMessage.isPresent()) {
-                str.append(String.format("\n\tfailed with error: %s", errorMessage.get()));
+                str.append(
+                        "🔴 *%s*:\n- *failed* with error: %s".formatted(targetNode.toString(), errorMessage.get()));
             }
             return str.toString();
         }
