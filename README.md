@@ -60,8 +60,6 @@ Options:
           Proxy server TCP port to listen on [default: 1080]
   -i, --proxy-ipv4 <PROXY_IPV4>
           Proxy server IPv4 address to listen on [default: 0.0.0.0]
-  -e, --enable-http-endpoint
-          Spin up HTTP endpoint in a background thread
       --http-endpoint-enabled
           Spin up HTTP endpoint in a background thread
       --http-endpoint-port <HTTP_ENDPOINT_PORT>
