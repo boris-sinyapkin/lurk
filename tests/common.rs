@@ -1,8 +1,8 @@
 use log::{debug, LevelFilter};
 use log4rs_test_utils::test_logging::init_logging_once_for;
-use lurk::server::LurkServer;
+use lurk::{api::LurkHttpEndpoint, server::LurkServer};
 use reqwest::Proxy;
-use std::{net::SocketAddr, time::Duration};
+use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
@@ -11,6 +11,24 @@ use tokio::{
 
 pub fn init_logging() {
     init_logging_once_for(None, LevelFilter::Trace, "{h({({l}):5.5})} [{M}] {f}:{L}: {m}{n}");
+}
+
+/// Spawn Lurk HTTP API endpoint.
+pub async fn spawn_http_api_endpoint(addr: SocketAddr) -> tokio::task::JoinHandle<()> {
+    // Node is not running. Just instance is created.
+    let node = LurkServer::new(SocketAddr::new(addr.ip(), 11222));
+    // Create endpoint with lurk node passed.
+    let handle = tokio::spawn(async move {
+        LurkHttpEndpoint::new(addr, Arc::new(node))
+            .run()
+            .await
+            .expect("Error during HTTP API endpoint run")
+    });
+
+    // Yeild execution untill server binds
+    tokio::task::yield_now().await;
+
+    handle
 }
 
 /// Spawn Lurk proxy instance.
