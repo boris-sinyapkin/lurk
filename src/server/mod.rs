@@ -1,13 +1,10 @@
-use self::handlers::LurkSocks5Handler;
 use crate::{
     common::logging::{self},
-    net::tcp::{
-        connection::{LurkTcpConnection, LurkTcpConnectionLabel},
-        listener::LurkTcpListener,
-    },
+    net::tcp::{connection::LurkTcpConnection, listener::LurkTcpListener},
 };
 use anyhow::Result;
 use async_listen::is_transient_error;
+use handlers::create_tcp_connection_handler;
 use log::{error, info, warn};
 use stats::LurkServerStats;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
@@ -64,16 +61,17 @@ impl LurkServer {
         logging::log_tcp_established_conn!(conn_peer_addr, conn_label);
 
         // Create connection handler and supply handling of particular traffic label in a separate thread.
-        let mut connection_handler = match conn.label() {
-            LurkTcpConnectionLabel::SOCKS5 => LurkSocks5Handler::new(conn),
-            unknown_label => {
-                logging::log_tcp_closed_conn_with_error!(conn_peer_addr, conn_label, unknown_label);
+        let mut connection_handler = match create_tcp_connection_handler(&conn.label()) {
+            Ok(handler) => handler,
+            Err(err) => {
+                logging::log_tcp_closed_conn_with_error!(conn_peer_addr, conn_label, err);
                 return;
             }
         };
 
+        // Submit execution in a separate task.
         tokio::spawn(async move {
-            if let Err(err) = connection_handler.handle().await {
+            if let Err(err) = connection_handler.handle(conn).await {
                 logging::log_tcp_closed_conn_with_error!(conn_peer_addr, conn_label, err);
             } else {
                 logging::log_tcp_closed_conn!(conn_peer_addr, conn_label);
