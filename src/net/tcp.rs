@@ -2,7 +2,7 @@ use super::Address;
 use anyhow::Result;
 use log::{debug, trace};
 use socket2::{SockRef, TcpKeepalive};
-use std::net::{SocketAddr, ToSocketAddrs};
+use std::{net::{SocketAddr, ToSocketAddrs}, time::Duration};
 use tokio::net::TcpStream;
 
 /// Different TCP connection options.
@@ -55,6 +55,21 @@ pub async fn establish_tcp_connection_with_opts(endpoint: &Address, tcp_opts: &T
     tcp_opts.apply_to(&mut tcp_stream)?;
 
     Ok(tcp_stream)
+}
+
+/// Establish TCP connection with passed ```endpoint``` with default options.
+pub async fn establish_tcp_connection(endpoint_address: &Address) -> Result<TcpStream> {
+    // Create TCP options.
+    let mut tcp_opts = TcpConnectionOptions::new();
+    tcp_opts.set_keepalive(
+        TcpKeepalive::new()
+            .with_time(Duration::from_secs(150))    // 2.5 min
+            .with_interval(Duration::from_secs(30)) // 30 sec
+            .with_retries(5),
+    );
+
+    // Establish TCP connection with the target endpoint.
+    establish_tcp_connection_with_opts(endpoint_address, &tcp_opts).await
 }
 
 pub fn resolve_sockaddr(addr: impl ToSocketAddrs) -> SocketAddr {

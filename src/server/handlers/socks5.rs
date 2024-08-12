@@ -2,12 +2,9 @@ use crate::{
     auth::LurkAuthenticator,
     common::{error::LurkError, logging},
     io::{tunnel::LurkTunnel, LurkRequest, LurkResponse},
-    net::{
-        tcp::{
-            connection::{LurkTcpConnection, LurkTcpConnectionHandler, LurkTcpConnectionLabel},
-            establish_tcp_connection_with_opts, TcpConnectionOptions,
-        },
-        Address,
+    net::tcp::{
+        self,
+        connection::{LurkTcpConnection, LurkTcpConnectionHandler, LurkTcpConnectionLabel},
     },
     proto::socks5::{
         request::{HandshakeRequest, RelayRequest},
@@ -19,9 +16,6 @@ use anyhow::{bail, Result};
 use async_trait::async_trait;
 use human_bytes::human_bytes;
 use log::{debug, error, info};
-use socket2::TcpKeepalive;
-use std::time::Duration;
-use tokio::net::TcpStream;
 
 pub struct LurkSocks5Handler {}
 
@@ -76,7 +70,7 @@ impl LurkSocks5Handler {
         debug!("Handling SOCKS5 CONNECT from {}", conn_peer_addr);
 
         // Create TCP stream with the endpoint
-        let mut outbound_stream = match LurkSocks5Handler::establish_tcp_connection(address).await {
+        let mut outbound_stream = match tcp::establish_tcp_connection(address).await {
             Ok(outbound_stream) => {
                 // On success, respond to relay request with success
                 let response = RelayResponse::builder().with_success().with_bound_address(conn_bound_addr).build();
@@ -113,20 +107,6 @@ impl LurkSocks5Handler {
 
         logging::log_request_handling_error!(conn, err_msg, request, response);
         response.write_to(conn.stream_mut()).await
-    }
-
-    async fn establish_tcp_connection(endpoint_address: &Address) -> Result<TcpStream> {
-        // Create TCP options.
-        let mut tcp_opts = TcpConnectionOptions::new();
-        tcp_opts.set_keepalive(
-            TcpKeepalive::new()
-                .with_time(Duration::from_secs(300))    // 5 min
-                .with_interval(Duration::from_secs(60)) // 1 min
-                .with_retries(5),
-        );
-
-        // Establish TCP connection with the target endpoint.
-        establish_tcp_connection_with_opts(endpoint_address, &tcp_opts).await
     }
 }
 
