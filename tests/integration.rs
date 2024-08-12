@@ -10,7 +10,7 @@ use std::{net::SocketAddr, thread::sleep, time::Duration};
 mod common;
 
 #[tokio::test]
-async fn http_server_single_client() {
+async fn socks5_proxy_single_client() {
     common::init_logging();
 
     let lurk_server_addr = "127.0.0.1:32001".parse::<SocketAddr>().unwrap();
@@ -48,7 +48,7 @@ async fn http_server_single_client() {
 }
 
 #[tokio::test]
-async fn echo_server_multiple_clients() {
+async fn socks5_proxy_multiple_clients() {
     common::init_logging();
 
     let num_clients = 100;
@@ -83,7 +83,7 @@ async fn echo_server_multiple_clients() {
 }
 
 #[tokio::test]
-async fn http_healthcheck() {
+async fn http_endpoint_healthcheck() {
     common::init_logging();
 
     let http_endpoint_addr = "127.0.0.1:32005".parse::<SocketAddr>().unwrap();

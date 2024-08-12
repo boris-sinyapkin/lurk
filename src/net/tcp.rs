@@ -175,7 +175,7 @@ pub mod listener {
                     .expect("Expect accepted connection before expired timeout")
                     .expect("Expect accepted TCP connection");
 
-                assert_eq!(LurkTcpConnectionLabel::SOCKS5, conn.label());
+                assert_eq!(LurkTcpConnectionLabel::Socks5, conn.label());
                 assert!(
                     listener.factory.get_active_tokens() <= conn_limit,
                     "Number of opened connections must not exceed the limit"
@@ -195,8 +195,8 @@ pub mod listener {
 
 pub mod connection {
 
-    use crate::io::stream::{LurkStream, LurkTcpStream};
     use anyhow::{bail, Result};
+    use async_trait::async_trait;
     use std::{fmt::Display, io, net::SocketAddr};
     use tokio::net::TcpStream;
 
@@ -209,7 +209,13 @@ pub mod connection {
     #[repr(u8)]
     pub enum LurkTcpConnectionLabel {
         /// Traffic of TCP connection belongs to proxy SOCKS5 protocol
-        SOCKS5 = 0x05,
+        Socks5,
+
+        /// Traffic of TCP connection belongs to HTTP protocol
+        Http,
+
+        /// Traffic of TCP connection belongs to HTTPS protocol
+        HttpSecure,
 
         /// Unknown traffic
         Unknown(u8),
@@ -227,7 +233,9 @@ pub mod connection {
 
             if peeked_bytes == 1 {
                 let label = match buff[0] {
-                    0x05 => LurkTcpConnectionLabel::SOCKS5,
+                    0x47 => LurkTcpConnectionLabel::Http,
+                    0x43 => LurkTcpConnectionLabel::HttpSecure,
+                    0x05 => LurkTcpConnectionLabel::Socks5,
                     v => LurkTcpConnectionLabel::Unknown(v),
                 };
 
@@ -241,8 +249,10 @@ pub mod connection {
     impl Display for LurkTcpConnectionLabel {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
-                LurkTcpConnectionLabel::SOCKS5 => write!(f, "SOCKS5"),
-                LurkTcpConnectionLabel::Unknown(l) => write!(f, "Unknown TCP label {l:#04x}"),
+                LurkTcpConnectionLabel::Http => write!(f, "HTTP"),
+                LurkTcpConnectionLabel::HttpSecure => write!(f, "HTTPS"),
+                LurkTcpConnectionLabel::Socks5 => write!(f, "SOCKS5"),
+                LurkTcpConnectionLabel::Unknown(l) => write!(f, "unknown {l:#04x}"),
             }
         }
     }
@@ -273,8 +283,7 @@ pub mod connection {
     }
 
     pub struct LurkTcpConnection {
-        /// Lurk wrapper of TcpStream
-        stream: LurkTcpStream,
+        stream: TcpStream,
         /// Label describing traffic in this TCP connection
         label: LurkTcpConnectionLabel,
         /// Remote address that this connection is connected to
@@ -284,11 +293,11 @@ pub mod connection {
     }
 
     impl LurkTcpConnection {
-        fn new(tcp_stream: TcpStream, label: LurkTcpConnectionLabel) -> Result<LurkTcpConnection> {
+        fn new(stream: TcpStream, label: LurkTcpConnectionLabel) -> Result<LurkTcpConnection> {
             Ok(LurkTcpConnection {
-                peer_addr: tcp_stream.peer_addr()?,
-                local_addr: tcp_stream.local_addr()?,
-                stream: LurkStream::new(tcp_stream),
+                peer_addr: stream.peer_addr()?,
+                local_addr: stream.local_addr()?,
+                stream,
                 label,
             })
         }
@@ -305,9 +314,14 @@ pub mod connection {
             self.label
         }
 
-        pub fn stream_mut(&mut self) -> &mut LurkTcpStream {
+        pub fn stream_mut(&mut self) -> &mut TcpStream {
             &mut self.stream
         }
+    }
+
+    #[async_trait]
+    pub trait LurkTcpConnectionHandler: Send {
+        async fn handle(&mut self, mut conn: LurkTcpConnection) -> Result<()>;
     }
 
     #[cfg(test)]
@@ -338,7 +352,7 @@ pub mod connection {
                 .accept()
                 .and_then(|(s, _)| async move {
                     let label = LurkTcpConnectionLabel::from_tcp_stream(&s).await.unwrap();
-                    assert_eq!(LurkTcpConnectionLabel::SOCKS5, label);
+                    assert_eq!(LurkTcpConnectionLabel::Socks5, label);
                     Ok(())
                 })
                 .await
