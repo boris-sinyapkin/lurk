@@ -205,11 +205,8 @@ pub mod connection {
         /// Traffic of TCP connection belongs to proxy SOCKS5 protocol
         Socks5,
 
-        /// Traffic of TCP connection belongs to HTTP protocol
+        /// Traffic of TCP connection belongs to HTTP(S) protocol
         Http,
-
-        /// Traffic of TCP connection belongs to HTTPS protocol
-        HttpSecure,
 
         /// Unknown traffic
         Unknown(u8),
@@ -227,9 +224,8 @@ pub mod connection {
 
             if peeked_bytes == 1 {
                 let label = match buff[0] {
-                    0x47 => LurkTcpConnectionLabel::Http,
-                    0x43 => LurkTcpConnectionLabel::HttpSecure,
-                    0x05 => LurkTcpConnectionLabel::Socks5,
+                    b if Self::is_http_label(b) => LurkTcpConnectionLabel::Http,
+                    b if Self::is_socks5_label(b) => LurkTcpConnectionLabel::Socks5,
                     v => LurkTcpConnectionLabel::Unknown(v),
                 };
 
@@ -238,13 +234,24 @@ pub mod connection {
                 bail!(io::ErrorKind::UnexpectedEof)
             }
         }
+
+        fn is_http_label(byte: u8) -> bool {
+            // GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH
+            matches!(
+                byte,
+                b'G' | b'g' | b'H' | b'h' | b'P' | b'p' | b'D' | b'd' | b'C' | b'c' | b'O' | b'o' | b'T' | b't'
+            )
+        }
+
+        fn is_socks5_label(byte: u8) -> bool {
+            matches!(byte, 0x05)
+        }
     }
 
     impl Display for LurkTcpConnectionLabel {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             match self {
-                LurkTcpConnectionLabel::Http => write!(f, "HTTP"),
-                LurkTcpConnectionLabel::HttpSecure => write!(f, "HTTPS"),
+                LurkTcpConnectionLabel::Http => write!(f, "HTTP(S)"),
                 LurkTcpConnectionLabel::Socks5 => write!(f, "SOCKS5"),
                 LurkTcpConnectionLabel::Unknown(l) => write!(f, "unknown {l:#04x}"),
             }
