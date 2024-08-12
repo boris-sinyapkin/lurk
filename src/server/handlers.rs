@@ -197,7 +197,7 @@ impl LurkHttpHandler {
                         }
                     }
                     Err(err) => {
-                        error!("Failed to establish TCP connection: {}", err);
+                        error!("Failed to establish outbound TCP connection: {}", err);
                     }
                 }
             });
@@ -241,10 +241,11 @@ impl LurkHttpHandler {
 
 #[async_trait]
 impl LurkTcpConnectionHandler for LurkHttpHandler {
-    async fn handle(&mut self, mut conn: LurkTcpConnection) -> Result<()> {
-        let io = TokioIo::new(conn.stream_mut());
+    async fn handle(&mut self, conn: LurkTcpConnection) -> Result<()> {
+        let io = TokioIo::from(conn);
         server::conn::http1::Builder::new()
             .serve_connection(io, service_fn(LurkHttpHandler::serve_request))
+            .with_upgrades()
             .await
             .map_err(anyhow::Error::from)
     }

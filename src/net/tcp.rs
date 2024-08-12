@@ -187,6 +187,7 @@ pub mod connection {
 
     use anyhow::{bail, Result};
     use async_trait::async_trait;
+    use hyper_util::rt::TokioIo;
     use std::{fmt::Display, io, net::SocketAddr};
     use tokio::net::TcpStream;
 
@@ -290,6 +291,13 @@ pub mod connection {
 
         pub fn stream_mut(&mut self) -> &mut TcpStream {
             &mut self.stream
+        }
+    }
+
+    /// Converts TCP connection to tokio IO instance.
+    impl From<LurkTcpConnection> for TokioIo<TcpStream> {
+        fn from(conn: LurkTcpConnection) -> Self {
+            TokioIo::new(conn.stream)
         }
     }
 
