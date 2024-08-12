@@ -18,6 +18,7 @@ use std::{
     net::{SocketAddr, ToSocketAddrs},
     pin::Pin,
     sync::Arc,
+    time::Duration,
 };
 use tokio::net::TcpListener;
 
@@ -27,6 +28,8 @@ pub struct LurkHttpEndpoint {
 }
 
 impl LurkHttpEndpoint {
+    const HTTP_HEADER_READ_TIMEOUT: Duration = Duration::from_secs(5);
+
     pub fn new(addr: impl ToSocketAddrs, node: Arc<LurkServer>) -> LurkHttpEndpoint {
         LurkHttpEndpoint {
             addr: tcp::resolve_sockaddr(addr),
@@ -49,8 +52,13 @@ impl LurkHttpEndpoint {
             tokio::spawn(async move {
                 // Handle the connection from the client using HTTP1 and pass any
                 // HTTP requests received on that connection to the service.
-                if let Err(err) = http1::Builder::new().timer(TokioTimer::new()).serve_connection(io, service).await {
-                    error!("Error occured while handling HTTP request from {client_addr:}: {err:?}");
+                if let Err(err) = http1::Builder::new()
+                    .timer(TokioTimer::new())
+                    .header_read_timeout(Self::HTTP_HEADER_READ_TIMEOUT)
+                    .serve_connection(io, service)
+                    .await
+                {
+                    error!("Error occured while handling HTTP request from {client_addr:}: {err:}");
                 }
             });
         }
