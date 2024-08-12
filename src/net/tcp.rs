@@ -1,9 +1,7 @@
-use super::Address;
-use anyhow::Result;
-use log::{debug, trace};
+use anyhow::{anyhow, Result};
 use socket2::{SockRef, TcpKeepalive};
-use std::{net::{SocketAddr, ToSocketAddrs}, time::Duration};
-use tokio::net::TcpStream;
+use std::{io, net::SocketAddr, time::Duration};
+use tokio::net::{lookup_host, TcpStream, ToSocketAddrs};
 
 /// Different TCP connection options.
 ///
@@ -40,16 +38,9 @@ impl TcpConnectionOptions {
 /// Establish TCP connection with passed ```endpoint```.
 ///
 /// Input ```tcp_opts``` are applied to created TCP socket right after stream creation.
-pub async fn establish_tcp_connection_with_opts(endpoint: &Address, tcp_opts: &TcpConnectionOptions) -> Result<TcpStream> {
-    // Resolve endpoint address.
-    trace!("Endpoint address {} resolution: ... ", endpoint);
-    let resolved = endpoint.to_socket_addr().await?;
-    trace!("Endpoint address {} resolution: SUCCESS with {}", endpoint, resolved);
-
+pub async fn establish_tcp_connection_with_opts(addr: impl ToSocketAddrs, tcp_opts: &TcpConnectionOptions) -> Result<TcpStream> {
     // Establish TCP connection with the endpoint.
-    debug!("TCP connection establishment with the endpoint {}: ... ", endpoint);
-    let mut tcp_stream = TcpStream::connect(resolved).await.map_err(anyhow::Error::from)?;
-    debug!("TCP connection establishment with the endpoint {}: SUCCESS", endpoint);
+    let mut tcp_stream = TcpStream::connect(addr).await.map_err(anyhow::Error::from)?;
 
     // Apply passed options to created TCP stream.
     tcp_opts.apply_to(&mut tcp_stream)?;
@@ -58,7 +49,7 @@ pub async fn establish_tcp_connection_with_opts(endpoint: &Address, tcp_opts: &T
 }
 
 /// Establish TCP connection with passed ```endpoint``` with default options.
-pub async fn establish_tcp_connection(endpoint_address: &Address) -> Result<TcpStream> {
+pub async fn establish_tcp_connection(addr: impl ToSocketAddrs) -> Result<TcpStream> {
     // Create TCP options.
     let mut tcp_opts = TcpConnectionOptions::new();
     tcp_opts.set_keepalive(
@@ -69,12 +60,11 @@ pub async fn establish_tcp_connection(endpoint_address: &Address) -> Result<TcpS
     );
 
     // Establish TCP connection with the target endpoint.
-    establish_tcp_connection_with_opts(endpoint_address, &tcp_opts).await
+    establish_tcp_connection_with_opts(addr, &tcp_opts).await
 }
 
-pub fn resolve_sockaddr(addr: impl ToSocketAddrs) -> SocketAddr {
-    // Return first resolved socket address
-    addr.to_socket_addrs().unwrap().next().expect("Expect benign address to resolve")
+pub async fn resolve_sockaddr(addr: impl ToSocketAddrs) -> Result<SocketAddr> {
+    lookup_host(addr).await?.next().ok_or(anyhow!(io::ErrorKind::AddrNotAvailable))
 }
 
 pub mod listener {
@@ -82,8 +72,8 @@ pub mod listener {
     use super::connection::{LurkTcpConnection, LurkTcpConnectionFactory, LurkTcpConnectionLabel};
     use anyhow::Result;
     use socket2::{Domain, Socket, Type};
-    use std::net::{SocketAddr, ToSocketAddrs};
-    use tokio::net::TcpListener;
+    use std::net::SocketAddr;
+    use tokio::net::{TcpListener, ToSocketAddrs};
 
     const TCP_LISTEN_BACKLOG: i32 = 1024;
 
@@ -97,7 +87,7 @@ pub mod listener {
         /// Binds TCP listener to passed `addr`.
         ///
         pub async fn bind(addr: impl ToSocketAddrs) -> Result<LurkTcpListener> {
-            let bind_addr = super::resolve_sockaddr(addr);
+            let bind_addr = super::resolve_sockaddr(addr).await?;
 
             // Create TCP socket
             let socket = Socket::new(Domain::for_address(bind_addr), Type::STREAM, None)?;
@@ -112,9 +102,7 @@ pub mod listener {
             // Create tokio TCP listener from TCP socket
             let inner: TcpListener = TcpListener::from_std(socket.into())?;
 
-            Ok(LurkTcpListener {
-                inner,
-            })
+            Ok(LurkTcpListener { inner })
         }
 
         /// Accept incoming TCP connection.

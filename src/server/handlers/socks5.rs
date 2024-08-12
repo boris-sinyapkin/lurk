@@ -70,7 +70,7 @@ impl LurkSocks5Handler {
         debug!("Handling SOCKS5 CONNECT from {}", conn_peer_addr);
 
         // Create TCP stream with the endpoint
-        let mut outbound_stream = match tcp::establish_tcp_connection(address).await {
+        let mut outbound_stream = match tcp::establish_tcp_connection(address.to_socket_addr().await?).await {
             Ok(outbound_stream) => {
                 // On success, respond to relay request with success
                 let response = RelayResponse::builder().with_success().with_bound_address(conn_bound_addr).build();

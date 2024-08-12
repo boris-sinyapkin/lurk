@@ -1,6 +1,9 @@
 use crate::{
     io::tunnel::LurkTunnel,
-    net::tcp::connection::{LurkTcpConnection, LurkTcpConnectionHandler},
+    net::tcp::{
+        self,
+        connection::{LurkTcpConnection, LurkTcpConnectionHandler},
+    },
 };
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
@@ -50,7 +53,7 @@ impl LurkHttpHandler {
 
                 // On successful upgrade, establish remote TCP connection
                 // and start data relaying.
-                match TcpStream::connect(addr_str).await {
+                match tcp::establish_tcp_connection(addr_str).await {
                     Ok(mut outbound) => {
                         let mut inbdound = TokioIo::new(upgraded);
                         let mut tunnel = LurkTunnel::new(&mut inbdound, &mut outbound);

@@ -1,4 +1,4 @@
-use crate::{net::tcp, server::LurkServer};
+use crate::server::LurkServer;
 use anyhow::Result;
 use bytes::Bytes;
 use chrono::{DateTime, TimeDelta, Utc};
@@ -13,13 +13,7 @@ use hyper_util::rt::{TokioIo, TokioTimer};
 use log::{debug, error, info, log_enabled, trace};
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DurationSeconds};
-use std::{
-    future::Future,
-    net::{SocketAddr, ToSocketAddrs},
-    pin::Pin,
-    sync::Arc,
-    time::Duration,
-};
+use std::{future::Future, net::SocketAddr, pin::Pin, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
 
 pub struct LurkHttpEndpoint {
@@ -30,9 +24,9 @@ pub struct LurkHttpEndpoint {
 impl LurkHttpEndpoint {
     const HTTP_HEADER_READ_TIMEOUT: Duration = Duration::from_secs(5);
 
-    pub fn new(addr: impl ToSocketAddrs, node: Arc<LurkServer>) -> LurkHttpEndpoint {
+    pub fn new(addr: SocketAddr, node: Arc<LurkServer>) -> LurkHttpEndpoint {
         LurkHttpEndpoint {
-            addr: tcp::resolve_sockaddr(addr),
+            addr,
             service: LurkHttpService { node },
         }
     }
