@@ -12,7 +12,7 @@ use crate::{
         Command,
     },
 };
-use anyhow::{bail, Result};
+use anyhow::{anyhow, bail, Result};
 use async_trait::async_trait;
 use human_bytes::human_bytes;
 use log::{debug, error, info};
@@ -53,8 +53,8 @@ impl LurkSocks5Handler {
 
     /// Handling SOCKS5 command which comes in relay request from client.
     async fn process_relay_request(conn: &mut LurkTcpConnection) -> Result<()> {
-        let peer_addr = conn.peer_addr();
-        let local_addr = conn.local_addr();
+        let conn_peer_addr = conn.peer_addr();
+        let conn_bound_addr = conn.local_addr();
         let inbound_stream = conn.stream_mut();
         let request = RelayRequest::read_from(inbound_stream).await?;
         let command = request.command();
@@ -62,11 +62,14 @@ impl LurkSocks5Handler {
 
         // Bail out and notify client if command isn't supported
         if command != Command::TCPConnect {
-            let err = anyhow::anyhow!(LurkError::UnsupportedSocksCommand(command));
-            return LurkSocks5Handler::on_relay_request_handling_error(err, &request, conn).await;
+            return LurkSocks5Handler::on_relay_request_handling_error(
+                anyhow!(LurkError::UnsupportedSocksCommand(command)),
+                &request,
+                conn,
+            )
+            .await;
         }
 
-        let (conn_peer_addr, conn_bound_addr) = (peer_addr, local_addr);
         debug!("Handling SOCKS5 CONNECT from {}", conn_peer_addr);
 
         // Create TCP stream with the endpoint
