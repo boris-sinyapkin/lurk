@@ -5,7 +5,7 @@ use crate::{
 use anyhow::Result;
 use async_listen::is_transient_error;
 use handlers::create_tcp_connection_handler;
-use log::{error, info, warn};
+use log::{error, info, warn, debug};
 use stats::LurkServerStats;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::time::sleep;

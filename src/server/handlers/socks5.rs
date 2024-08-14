@@ -70,7 +70,7 @@ impl LurkSocks5Handler {
             .await;
         }
 
-        debug!("Handling SOCKS5 CONNECT from {}", conn_peer_addr);
+        info!("SOCKS5 CONNECT from peer {} to {}", conn_peer_addr, address);
 
         // Create TCP stream with the endpoint
         let mut outbound_stream = match tcp::establish_tcp_connection(address.to_socket_addr().await?).await {

@@ -2,7 +2,7 @@
 
 macro_rules! log_tunnel_created {
     ($peer:expr, $proxy:expr, $endpoint:expr) => {
-        info!(
+        debug!(
             "\n\n\tTunnel has been CREATED: \
           \n\t\tsource [{}] <--L--> lurk [{}] <--R--> destination [{}]\n",
             $peer, $proxy, $endpoint
@@ -12,7 +12,7 @@ macro_rules! log_tunnel_created {
 
 macro_rules! log_tunnel_closed {
     ($peer:expr, $proxy:expr, $endpoint:expr, $l2r:expr, $r2l:expr) => {
-        info!(
+        debug!(
             "\n\n\tTunnel has been CLOSED: \
           \n\t\tsource [{}] <--L--> lurk [{}] <--R--> destination [{}] \
           \n\t\ttransmitted: L->R {}, R->L {}\n",
@@ -75,7 +75,7 @@ macro_rules! log_tcp_closed_conn_with_error {
 
 macro_rules! log_tcp_closed_conn {
     ($conn_addr:expr, $conn_label:expr) => {
-        info!(
+        debug!(
             "\n\n\tTCP {} connection has been CLOSED: \
             \n\t\tpeer: '{}' \
             \n",
@@ -86,7 +86,7 @@ macro_rules! log_tcp_closed_conn {
 
 macro_rules! log_tcp_established_conn {
     ($conn_addr:expr, $conn_label:expr) => {
-        info!(
+        debug!(
             "\n\n\tTCP connection with {} label has been OPENED: \
             \n\t\tpeer: '{}' \
             \n",
