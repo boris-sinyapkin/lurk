@@ -5,7 +5,7 @@ use crate::{
         connection::{LurkTcpConnection, LurkTcpConnectionHandler},
     },
 };
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use async_trait::async_trait;
 use bytes::Bytes;
 use http_body_util::{combinators::BoxBody, BodyExt, Empty, Full};
@@ -30,16 +30,17 @@ impl LurkHttpHandler {
             info!("{:?} {} '{}'", request.version(), request.method(), request.uri());
         }
 
-        if request.method() == Method::CONNECT {
-            let addr_str = match request.uri().authority() {
-                Some(str) => str.to_string(),
-                None => {
-                    error!("CONNECT host is not socket addr: {:?}", request.uri());
-                    return Ok(Self::bad_request());
-                }
-            };
+        // Get remote host address from the request.
+        let remote_addr = match utils::get_host_addr(&mut request) {
+            Some(addr) => addr.to_socket_addr().await?,
+            None => {
+                error!("Failed to get remote host address");
+                return Ok(Self::bad_request());
+            }
+        };
 
-            let mut outbound = match tcp::establish_tcp_connection(addr_str).await {
+        if request.method() == Method::CONNECT {
+            let mut outbound = match tcp::establish_tcp_connection(remote_addr).await {
                 Ok(outbound) => outbound,
                 Err(err) => {
                     error!("Failed to establish outbound TCP connection: {}", err);
@@ -67,10 +68,7 @@ impl LurkHttpHandler {
 
             Ok(Self::ok())
         } else {
-            let host = request.uri().host().ok_or(anyhow!("HTTP request has no host"))?;
-            let port = request.uri().port_u16().unwrap_or(80);
-
-            let stream = TcpStream::connect((host, port)).await?;
+            let stream = TcpStream::connect(remote_addr).await?;
             let io = TokioIo::new(stream);
 
             let (mut sender, conn) = client::conn::http1::Builder::new()
@@ -85,9 +83,6 @@ impl LurkHttpHandler {
                     error!("Connection failed: {:?}", err);
                 }
             });
-
-            // Use only path for outbound request to eliminate possible 414 "URI Too Long" http error.
-            *request.uri_mut() = request.uri().path().parse()?;
 
             // Send request on associated connection.
             let response = sender.send_request(request).await?;
@@ -140,5 +135,205 @@ impl LurkTcpConnectionHandler for LurkHttpHandler {
             .with_upgrades()
             .await
             .map_err(anyhow::Error::from)
+    }
+}
+
+mod utils {
+    use crate::net::{ipv4_socket_address, ipv6_socket_address, Address};
+    use anyhow::Result;
+    use hyper::{
+        body,
+        http::uri::{Authority, Parts, Scheme},
+        Request, Uri,
+    };
+    use log::{debug, error, trace};
+    use std::{
+        net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
+        str::FromStr,
+    };
+
+    pub fn get_host_addr(req: &mut Request<body::Incoming>) -> Option<Address> {
+        if req.uri().authority().is_some() {
+            get_host_addr_from_authority(req)
+        } else {
+            get_host_addr_from_header(req)
+        }
+    }
+
+    fn get_host_addr_from_authority(req: &mut Request<body::Incoming>) -> Option<Address> {
+        let authority = match req.uri().authority() {
+            Some(a) => a.clone(),
+            None => {
+                error!("URI {} doesn't have authority", req.uri());
+                return None;
+            }
+        };
+
+        match parse_host_from_authority(req.uri().scheme_str(), &authority) {
+            Some(host) => {
+                trace!(
+                    "{:?} {} URI {} got host {} from authority",
+                    req.version(),
+                    req.method(),
+                    req.uri(),
+                    host,
+                );
+
+                // Use only path and query URI for outbound request to eliminate
+                // possible 414 "URI Too Long" http error.
+                if let Some(parse_and_query) = req.uri().path_and_query() {
+                    let mut new_uri_parts: Parts = Parts::default();
+                    new_uri_parts.path_and_query = Some(parse_and_query.clone());
+                    match Uri::from_parts(new_uri_parts) {
+                        Ok(uri) => {
+                            debug!("Reassembled URI {} from authority, new value: {}", req.uri(), uri);
+                            *req.uri_mut() = uri;
+                        }
+                        Err(_) => error!("Failed to reassemble URI {} from authority", req.uri()),
+                    };
+                }
+
+                Some(host)
+            }
+            None => {
+                error!(
+                    "{:?} {} URI {} authority {} is invalid",
+                    req.version(),
+                    req.method(),
+                    req.uri(),
+                    authority
+                );
+
+                None
+            }
+        }
+    }
+
+    fn get_host_addr_from_header(req: &mut Request<body::Incoming>) -> Option<Address> {
+        let host_header_value: &str = match req.headers().get("Host") {
+            Some(host) => match host.to_str() {
+                Ok(s) => s,
+                Err(_) => {
+                    error!(
+                        "{:?} {} URI {} \"Host\" header invalid encoding, value: {:?}",
+                        req.version(),
+                        req.method(),
+                        req.uri(),
+                        host
+                    );
+                    return None;
+                }
+            },
+            None => {
+                error!(
+                    "{:?} {} URI {} doesn't have valid host and missing the \"Host\" header",
+                    req.version(),
+                    req.method(),
+                    req.uri()
+                );
+                return None;
+            }
+        };
+
+        match Authority::from_str(host_header_value) {
+            Ok(authority) => match parse_host_from_authority(req.uri().scheme_str(), &authority) {
+                Some(host) => {
+                    trace!(
+                        "{:?} {} URI {} got host from header: {}",
+                        req.version(),
+                        req.method(),
+                        req.uri(),
+                        host
+                    );
+
+                    if reassemble_uri(req.uri_mut(), authority).is_err() {
+                        error!("Failed to reassemble URI {} from \"Host\"", req.uri());
+                    }
+
+                    debug!("Reassembled URI from \"Host\", {}", req.uri());
+
+                    Some(host)
+                }
+                None => {
+                    error!(
+                        "{:?} {} URI {} \"Host\" header invalid, value: {}",
+                        req.version(),
+                        req.method(),
+                        req.uri(),
+                        host_header_value
+                    );
+
+                    None
+                }
+            },
+            Err(..) => {
+                error!(
+                    "{:?} {} URI {} \"Host\" header is not an Authority, value: {:?}",
+                    req.version(),
+                    req.method(),
+                    req.uri(),
+                    host_header_value
+                );
+
+                None
+            }
+        }
+    }
+
+    fn parse_host_from_authority(scheme_str: Option<&str>, authority: &Authority) -> Option<Address> {
+        // RFC7230 indicates that we should ignore userinfo
+        // https://tools.ietf.org/html/rfc7230#section-5.3.3
+
+        // Check if URI has port
+        let port = match authority.port_u16() {
+            Some(port) => port,
+            None => {
+                match scheme_str {
+                    None => 80, // Assume it is http
+                    Some("http") => 80,
+                    Some("https") => 443,
+                    _ => return None, // Not supported
+                }
+            }
+        };
+
+        let host_str = authority.host();
+
+        // RFC3986 indicates that IPv6 address should be wrapped in [ and ]
+        // https://tools.ietf.org/html/rfc3986#section-3.2.2
+        //
+        // Example: [::1] without port
+        if host_str.starts_with('[') && host_str.ends_with(']') {
+            // Must be a IPv6 address
+            let addr = &host_str[1..host_str.len() - 1];
+            match addr.parse::<Ipv6Addr>() {
+                Ok(ipv6) => Some(ipv6_socket_address!(ipv6, port)),
+                // Ignore invalid IPv6 address
+                Err(..) => None,
+            }
+        } else {
+            // It must be a IPv4 address
+            match host_str.parse::<Ipv4Addr>() {
+                Ok(ipv4) => Some(ipv4_socket_address!(ipv4, port)),
+                // Should be a domain name, or a invalid IP address.
+                // Let DNS deal with it.
+                Err(..) => Some(Address::DomainName(host_str.to_owned(), port)),
+            }
+        }
+    }
+
+    fn reassemble_uri(uri: &mut Uri, authority: Authority) -> Result<()> {
+        // Reassemble URI
+        let mut parts = uri.clone().into_parts();
+        if parts.scheme.is_none() {
+            // Use http as default.
+            parts.scheme = Some(Scheme::HTTP);
+        }
+        parts.authority = Some(authority.clone());
+
+        // Replaces URI
+        *uri = Uri::from_parts(parts)?;
+
+        Ok(())
     }
 }
