@@ -153,10 +153,9 @@ mod utils {
     };
 
     pub fn get_host_addr(req: &mut Request<body::Incoming>) -> Option<Address> {
-        if req.uri().authority().is_some() {
-            get_host_addr_from_authority(req)
-        } else {
-            get_host_addr_from_header(req)
+        match get_host_addr_from_authority(req) {
+            Some(addr) => Some(addr),
+            None => get_host_addr_from_header(req),
         }
     }
 
