@@ -2,7 +2,7 @@ use crate::{
     io::tunnel::LurkTunnel,
     net::tcp::{
         self,
-        connection::{LurkTcpConnection, LurkTcpConnectionHandler},
+        connection::{LurkTcpConnection, LurkTcpConnectionHandler, LurkTcpConnectionLabel},
     },
 };
 use anyhow::Result;
@@ -128,6 +128,7 @@ impl LurkHttpHandler {
 #[async_trait]
 impl LurkTcpConnectionHandler for LurkHttpHandler {
     async fn handle(&mut self, conn: LurkTcpConnection) -> Result<()> {
+        debug_assert_eq!(LurkTcpConnectionLabel::Http, conn.label(), "expected HTTP label");
         server::conn::http1::Builder::new()
             .preserve_header_case(true)
             .title_case_headers(true)

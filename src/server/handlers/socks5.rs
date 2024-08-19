@@ -28,15 +28,16 @@ impl LurkSocks5Handler {
         // Authenticator will select method among all stored in request
         // and authenticate the connection on success.
         let mut authenticator = LurkAuthenticator::new();
-        // Prepare builder for the response on handshake request.
-        let mut response_builder = HandshakeResponse::builder();
 
         match authenticator.select_auth_method(request.auth_methods()) {
             Some(method) => {
                 debug!("Selected authentication method {:?} for {}", method, conn.peer_addr());
                 // Respond to the client with selected method.
-                response_builder.with_auth_method(method);
-                response_builder.build().write_to(conn.stream_mut()).await?;
+                HandshakeResponse::builder()
+                    .with_auth_method(method)
+                    .build()
+                    .write_to(conn.stream_mut())
+                    .await?;
                 // Authenticate the client by using selected method.
                 // Note: Currently, only None method (disabled auth) is supported,
                 // so just a sanity check here.
@@ -44,8 +45,11 @@ impl LurkSocks5Handler {
             }
             None => {
                 debug!("No acceptable methods identified for {}", conn.peer_addr());
-                response_builder.with_no_acceptable_method();
-                response_builder.build().write_to(conn.stream_mut()).await?;
+                HandshakeResponse::builder()
+                    .with_no_acceptable_method()
+                    .build()
+                    .write_to(conn.stream_mut())
+                    .await?;
                 bail!(LurkError::NoAcceptableAuthenticationMethod)
             }
         }
@@ -76,8 +80,12 @@ impl LurkSocks5Handler {
         let mut outbound_stream = match tcp::establish_tcp_connection(address.to_socket_addr().await?).await {
             Ok(outbound_stream) => {
                 // On success, respond to relay request with success
-                let response = RelayResponse::builder().with_success().with_bound_address(conn_bound_addr).build();
-                response.write_to(inbound_stream).await?;
+                RelayResponse::builder()
+                    .with_success()
+                    .with_bound_address(conn_bound_addr)
+                    .build()
+                    .write_to(inbound_stream)
+                    .await?;
 
                 outbound_stream
             }
