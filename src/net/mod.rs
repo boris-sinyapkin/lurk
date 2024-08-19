@@ -3,9 +3,13 @@ use anyhow::{anyhow, Result};
 use bytes::BufMut;
 use std::{
     fmt::Display,
+    io,
     net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6},
 };
-use tokio::{io::AsyncReadExt, net::lookup_host};
+use tokio::{
+    io::AsyncReadExt,
+    net::{lookup_host, ToSocketAddrs},
+};
 
 macro_rules! ipv4_socket_address {
     ($ipv4:expr, $port:expr) => {
@@ -24,6 +28,10 @@ pub mod tcp;
 pub(crate) use ipv4_socket_address;
 pub(crate) use ipv6_socket_address;
 
+pub async fn resolve_sockaddr(addr: impl ToSocketAddrs) -> Result<SocketAddr> {
+    lookup_host(addr).await?.next().ok_or(anyhow!(io::ErrorKind::AddrNotAvailable))
+}
+
 #[repr(u8)]
 #[rustfmt::skip]
 #[derive(Debug, PartialEq, Eq, Hash, Clone)]
@@ -36,15 +44,7 @@ impl Address {
     pub async fn to_socket_addr(&self) -> Result<SocketAddr> {
         match self {
             Address::SocketAddress(sock_addr) => Ok(*sock_addr),
-            Address::DomainName(hostname, port) => {
-                // Resolve by means of builtin tokio DNS resolver
-                let resolved_names = lookup_host(format!("{hostname:}:{port:}")).await?;
-                // Take first found
-                resolved_names
-                    .into_iter()
-                    .nth(0)
-                    .ok_or(anyhow!(LurkError::UnresolvedDomainName(hostname.to_string())))
-            }
+            Address::DomainName(hostname, port) => resolve_sockaddr(format!("{hostname:}:{port:}")).await,
         }
     }
 

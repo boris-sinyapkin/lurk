@@ -12,6 +12,7 @@ pub enum LurkError {
     #[error("Unsupported authentication method {0:?}")]
     UnsupportedAuthMethod(LurkAuthMethod),
     #[error("Unable to resolve domain name {0}")]
+    #[allow(dead_code)]
     UnresolvedDomainName(String),
     #[error("Unable to agree on authentication method")]
     NoAcceptableAuthenticationMethod,

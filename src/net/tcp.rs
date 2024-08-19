@@ -1,7 +1,7 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use socket2::{SockRef, TcpKeepalive};
-use std::{io, net::SocketAddr, time::Duration};
-use tokio::net::{lookup_host, TcpStream, ToSocketAddrs};
+use std::time::Duration;
+use tokio::net::{TcpStream, ToSocketAddrs};
 
 /// Different TCP connection options.
 ///
@@ -63,13 +63,10 @@ pub async fn establish_tcp_connection(addr: impl ToSocketAddrs) -> Result<TcpStr
     establish_tcp_connection_with_opts(addr, &tcp_opts).await
 }
 
-pub async fn resolve_sockaddr(addr: impl ToSocketAddrs) -> Result<SocketAddr> {
-    lookup_host(addr).await?.next().ok_or(anyhow!(io::ErrorKind::AddrNotAvailable))
-}
-
 pub mod listener {
 
     use super::connection::{LurkTcpConnection, LurkTcpConnectionFactory, LurkTcpConnectionLabel};
+    use crate::net::resolve_sockaddr;
     use anyhow::Result;
     use socket2::{Domain, Socket, Type};
     use std::net::SocketAddr;
@@ -87,7 +84,7 @@ pub mod listener {
         /// Binds TCP listener to passed `addr`.
         ///
         pub async fn bind(addr: impl ToSocketAddrs) -> Result<LurkTcpListener> {
-            let bind_addr = super::resolve_sockaddr(addr).await?;
+            let bind_addr = resolve_sockaddr(addr).await?;
 
             // Create TCP socket
             let socket = Socket::new(Domain::for_address(bind_addr), Type::STREAM, None)?;
