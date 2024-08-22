@@ -1,23 +1,26 @@
 mod common;
 
-mod socks5 {
+mod socks5_proxy {
 
-    use crate::common;
+    use crate::common::{
+        self,
+        listeners::{self, cancel_listener, AsyncListener},
+        next_available_address, utils,
+    };
     use futures::{stream::FuturesUnordered, StreamExt};
     use httptest::{matchers::request::method_path, responders::status_code, Expectation, ServerBuilder};
     use log::info;
-    use reqwest::ClientBuilder;
-    use std::{net::SocketAddr, thread::sleep, time::Duration};
 
     #[tokio::test]
     async fn single_client() {
         common::init_logging();
 
-        let lurk_server_addr = "127.0.0.1:32001".parse::<SocketAddr>().unwrap();
-        let http_server_addr = "127.0.0.1:32002".parse::<SocketAddr>().unwrap();
+        let lurk_server_addr = next_available_address();
+        let http_server_addr = next_available_address();
 
         // Run proxy
-        let lurk_handle = common::spawn_lurk_server(lurk_server_addr).await;
+        let lurk = listeners::LurkServerListener::new(lurk_server_addr);
+        let lurk = lurk.run().await;
 
         // Run HTTP server in the background
         let http_server = ServerBuilder::new()
@@ -27,14 +30,8 @@ mod socks5 {
 
         http_server.expect(Expectation::matching(method_path("GET", "/hello_world")).respond_with(status_code(200)));
 
-        // Run HTTP client through Lurk proxy
-        let http_client = ClientBuilder::new()
-            .proxy(common::socks5_proxy(lurk_server_addr))
-            .build()
-            .expect("Unable to build HTTP client through supplied proxy");
-
         // Send GET request
-        let response = http_client
+        let response = utils::http::create_http_client_with_proxy(common::socks5_proxy(lurk_server_addr))
             .get(http_server.url_str("/hello_world").to_string())
             .send()
             .await
@@ -42,9 +39,7 @@ mod socks5 {
 
         assert_eq!(200, response.status());
 
-        lurk_handle.abort();
-        drop(http_server);
-        sleep(Duration::from_millis(1000));
+        cancel_listener!(lurk);
     }
 
     #[tokio::test]
@@ -52,22 +47,23 @@ mod socks5 {
         common::init_logging();
 
         let num_clients = 100;
-        let generated_data_len = 1024;
-        let lurk_server_addr = "127.0.0.1:32003".parse::<SocketAddr>().unwrap();
-        let echo_server_addr = "127.0.0.1:32004".parse::<SocketAddr>().unwrap();
+        let lurk_server_addr = next_available_address();
+        let echo_server_addr = next_available_address();
 
         // Run Lurk proxy.
-        let lurk_handle = common::spawn_lurk_server(lurk_server_addr).await;
+        let lurk = listeners::LurkServerListener::new(lurk_server_addr);
+        let lurk = lurk.run().await;
 
         // Run echo server. Data sent to this server will be proxied through Lurk
         // instance spawned above.
-        let echo_handle = common::spawn_echo_server(echo_server_addr).await;
+        let echo = listeners::tcp_echo_server::TcpEchoServer::bind(echo_server_addr).await;
+        let echo = echo.run().await;
 
         // Spawn clients and "ping-pong" data through lurk proxy.
         let client_tasks: FuturesUnordered<_> = (0..num_clients)
             .map(|i| async move {
                 info!("Started client #{i:}");
-                common::ping_pong_data_through_socks5(echo_server_addr, lurk_server_addr, generated_data_len).await;
+                common::ping_pong_data_through_socks5(echo_server_addr, lurk_server_addr).await;
                 info!("Finished client #{i:}");
             })
             .collect();
@@ -75,32 +71,58 @@ mod socks5 {
         // Await all clients to complete.
         client_tasks.collect::<()>().await;
 
-        // Shutdown listeners.
-        echo_handle.abort();
-        lurk_handle.abort();
+        cancel_listener!(lurk);
+        cancel_listener!(echo);
+    }
+}
 
-        sleep(Duration::from_millis(1000));
+mod http_proxy {
+
+    use crate::common::{self, next_available_address, utils::http::create_http_client};
+
+    #[tokio::test]
+    async fn single_client_connect() {
+        common::init_logging();
+
+        let echo_server_addr = next_available_address();
+
+        // Spawn HTTP echo server
+        let (handle, token) = common::spawn_http_echo_server(echo_server_addr).await;
+
+        // Send GET request
+        let response = create_http_client()
+            .get(format!("http://{echo_server_addr}/echo"))
+            .send()
+            .await
+            .expect("Unable to send GET request to HTTP server");
+
+        assert_eq!(200, response.status());
+
+        token.cancel();
+        handle.await.unwrap();
     }
 }
 
 mod api_endpoint {
 
-    use crate::common;
+    use crate::api_endpoint::listeners::cancel_listener;
+    use crate::common::{
+        self,
+        listeners::{self, AsyncListener},
+    };
+    use crate::common::{next_available_address, utils};
     use hyper::StatusCode;
-    use reqwest::ClientBuilder;
     use serde_json::{json, Value};
-    use std::{net::SocketAddr, thread::sleep, time::Duration};
 
     #[tokio::test]
     async fn healthcheck() {
         common::init_logging();
 
-        let http_endpoint_addr = "127.0.0.1:32005".parse::<SocketAddr>().unwrap();
-        let http_endpoint = common::spawn_http_api_endpoint(http_endpoint_addr).await;
+        let http_endpoint_addr = next_available_address();
+        let http_endpoint = listeners::LurkHttpEndpointListener::new(http_endpoint_addr);
+        let http_endpoint = http_endpoint.run().await;
 
-        let http_client = ClientBuilder::new().build().expect("Unable to build HTTP client");
-
-        let response = http_client
+        let response = utils::http::create_http_client()
             .get(format!("http://{}/healthcheck", http_endpoint_addr))
             .send()
             .await
@@ -114,7 +136,6 @@ mod api_endpoint {
         assert_eq!(*body_value.get("uptime_secs").unwrap(), json!(null));
         assert_eq!(*body_value.get("started_utc_ts").unwrap(), json!(null));
 
-        http_endpoint.abort();
-        sleep(Duration::from_millis(1000));
+        cancel_listener!(http_endpoint);
     }
 }
