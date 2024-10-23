@@ -5,10 +5,10 @@ use crate::{
 use anyhow::Result;
 use async_listen::is_transient_error;
 use handlers::create_tcp_connection_handler;
-use log::{error, info, warn, debug};
+use log::{debug, error, info, warn};
 use stats::LurkServerStats;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
-use tokio::time::sleep;
+use tokio::{signal, time::sleep};
 
 mod handlers;
 
@@ -38,11 +38,21 @@ impl LurkServer {
         self.stats.on_server_started();
 
         loop {
-            match tcp_listener.accept().await {
-                Ok(conn) => self.on_tcp_connection_established(conn).await,
-                Err(err) => self.on_tcp_acception_error(err).await,
+            tokio::select! {
+                accepted = tcp_listener.accept() => match accepted {
+                    Ok(conn) => self.on_tcp_connection_established(conn).await,
+                    Err(err) => self.on_tcp_acception_error(err).await,
+                },
+                _ = signal::ctrl_c() => {
+                    info!("Received Ctrl+C. Leaving main loop.");
+                    break
+                }
             }
         }
+
+        self.stats.on_server_finished();
+
+        Ok(())
     }
 
     async fn on_tcp_acception_error(&self, err: anyhow::Error) {

@@ -23,6 +23,10 @@ impl LurkServerStats {
         self.started_ts_millis.store(current_time.timestamp_millis(), Ordering::Relaxed);
     }
 
+    pub fn on_server_finished(&self) {
+        /* Not implemented */
+    }
+
     /// Returns true if server is started.
     /// There's no guarantee it hasn't finished yet.
     pub fn is_server_started(&self) -> bool {
