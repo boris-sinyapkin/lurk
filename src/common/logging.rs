@@ -84,6 +84,17 @@ macro_rules! log_tcp_closed_conn {
     };
 }
 
+macro_rules! log_tcp_canceled_conn {
+    ($conn_addr:expr, $conn_label:expr) => {
+        debug!(
+            "\n\n\tTCP {} connection has been CANCELED: \
+            \n\t\tpeer: '{}' \
+            \n",
+            $conn_label, $conn_addr,
+        )
+    };
+}
+
 macro_rules! log_tcp_established_conn {
     ($conn_addr:expr, $conn_label:expr) => {
         debug!(
@@ -110,5 +121,6 @@ pub(crate) use log_tcp_acception_error;
 pub(crate) use log_tcp_closed_conn;
 pub(crate) use log_tcp_closed_conn_with_error;
 pub(crate) use log_tcp_established_conn;
+pub(crate) use log_tcp_canceled_conn;
 
 pub(crate) use log_request_handling_error;

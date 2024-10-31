@@ -9,6 +9,7 @@ use log::{debug, error, info, warn};
 use stats::LurkServerStats;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{signal, time::sleep};
+use tokio_util::{sync::CancellationToken, task::TaskTracker};
 
 mod handlers;
 
@@ -17,6 +18,8 @@ pub mod stats;
 pub struct LurkServer {
     bind_addr: SocketAddr,
     stats: Arc<LurkServerStats>,
+    task_tracker: TaskTracker,
+    task_cancellation_token: CancellationToken,
 }
 
 impl LurkServer {
@@ -28,6 +31,8 @@ impl LurkServer {
         LurkServer {
             bind_addr,
             stats: Arc::new(LurkServerStats::new()),
+            task_tracker: TaskTracker::new(),
+            task_cancellation_token: CancellationToken::new(),
         }
     }
 
@@ -44,13 +49,15 @@ impl LurkServer {
                     Err(err) => self.on_tcp_acception_error(err).await,
                 },
                 _ = signal::ctrl_c() => {
-                    info!("Received Ctrl+C. Leaving main loop.");
+                    info!("Received Ctrl+C. Gracefully tearing down ...");
+                    self.on_shutdown_requested();
                     break
                 }
             }
         }
 
         self.stats.on_server_finished();
+        self.task_tracker.wait().await;
 
         Ok(())
     }
@@ -79,18 +86,33 @@ impl LurkServer {
             }
         };
 
+        // Clone token in order to cancel running task from outside.
+        let token = self.task_cancellation_token.clone();
+
         // Submit execution in a separate task.
-        tokio::spawn(async move {
-            if let Err(err) = connection_handler.handle(conn).await {
-                logging::log_tcp_closed_conn_with_error!(conn_peer_addr, conn_label, err);
-            } else {
-                logging::log_tcp_closed_conn!(conn_peer_addr, conn_label);
+        self.task_tracker.spawn(async move {
+            tokio::select! {
+                res = connection_handler.handle(conn) => {
+                    if let Err(err) = res {
+                        logging::log_tcp_closed_conn_with_error!(conn_peer_addr, conn_label, err);
+                    } else {
+                        logging::log_tcp_closed_conn!(conn_peer_addr, conn_label);
+                    }
+                },
+                _ = token.cancelled() => {
+                    logging::log_tcp_canceled_conn!(conn_peer_addr, conn_label);
+                }
             }
         });
     }
 
     pub fn get_stats(&self) -> Arc<LurkServerStats> {
         Arc::clone(&self.stats)
+    }
+
+    fn on_shutdown_requested(&self) {
+        self.task_tracker.close();
+        self.task_cancellation_token.cancel();
     }
 }
 
